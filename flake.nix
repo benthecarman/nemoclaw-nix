@@ -263,6 +263,11 @@
             assert builtins.elem pkgs.bash vllmCfg.systemd.services.nemoclaw-vllm.path;
             assert !(builtins.elem 8000 vllmCfg.networking.firewall.allowedTCPPorts);
             pkgs.writeText "nemoclaw-vllm-module-contract" "ok\n";
+          vllmCudaToolkitContract = pkgs.runCommand "nemoclaw-vllm-cuda-toolkit-contract" { } ''
+            test -e ${pkgs.vllm-nemoclaw.cudaToolkit}/include/cublasLt.h
+            test -e ${pkgs.vllm-nemoclaw.cudaToolkit}/lib/libcublasLt.so
+            touch "$out"
+          '';
           vllmSmoke = pkgs.runCommand "nemoclaw-vllm-smoke" { nativeBuildInputs = [ pkgs.vllm-nemoclaw ]; } ''
             python -c 'import vllm; assert vllm.__version__ == "0.25.1"'
             touch "$out"
@@ -306,6 +311,7 @@
             moduleContract
             nixclawModuleContract
             nixclawTests
+            vllmCudaToolkitContract
             vllmModuleContract
             vllmPrefixCachingFlags
             vllmSmoke

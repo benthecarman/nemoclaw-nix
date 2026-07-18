@@ -174,6 +174,8 @@ let
       cuda_crt
       cuda_cudart
       cuda_nvcc
+      libcublas.include
+      libcublas.lib
       libcurand.include
       libcurand.lib
     ];
@@ -223,6 +225,7 @@ environment.overrideAttrs (old: {
     platforms = supportedSystems;
   };
   passthru = (old.passthru or { }) // {
+    inherit cudaToolkit;
     pythonPackageSet = pythonSet;
   };
 })
