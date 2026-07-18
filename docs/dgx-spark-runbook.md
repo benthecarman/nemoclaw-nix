@@ -6,13 +6,15 @@ gives NemoClaw a real Docker daemon. NixOS is not in NemoClaw's validated
 platform matrix, so qualify one canary Spark before rolling the configuration
 out to the rest of the fleet.
 
-At this revision, the ARM64 derivations and combined NixOS module configuration
-have been evaluated but not built or run on DGX Spark hardware. Live validation
-was completed on `x86_64-linux` with NemoClaw `0.0.86`, OpenShell `0.0.85`,
-OpenClaw `2026.6.10`, a Ready sandbox, and healthy local vLLM. The hardware
-steps and Hermes runtime checks below are the remaining acceptance work. The
-prior OpenClaw result verifies shared packaging only; it is not a Hermes test or
-a claim of canonical or supported NemoClaw behavior.
+At this revision, the aarch64 vLLM `0.25.1` output has been built and exercised
+on a physical DGX Spark GB10. A small model completed native SM121 kernel JIT,
+served its OpenAI-compatible API, and generated successfully. The combined
+NixOS module configuration evaluates but has not been activated on the Spark.
+Live NemoClaw/OpenShell validation was completed separately on `x86_64-linux`
+with NemoClaw `0.0.86`, OpenShell `0.0.85`, OpenClaw `2026.6.10`, a Ready
+sandbox, and healthy local vLLM. The Spark Hermes and containment checks below
+remain acceptance work; neither result is a claim of canonical or supported
+NemoClaw behavior.
 
 The examples use `spark-01` and an operator account named `operator`. Replace
 those values on every machine. Never reuse another machine's generated
@@ -311,9 +313,11 @@ healthy completed step is not rebuilt unnecessarily.
 ## 7. Add local vLLM after the canary passes
 
 NemoClaw can start its managed vLLM path on a detected DGX Spark or connect to an
-existing vLLM server. The upstream recipe has not been qualified through this
-NixOS flake on physical Spark hardware. Use the current model choices printed by
-onboarding rather than copying an old model slug into the Nix configuration.
+existing vLLM server. This flake's native vLLM package has passed a physical
+Spark smoke test; the upstream managed recipe and full NemoClaw-to-vLLM path
+have not. See the [qualification record](spark-vllm-qualification.md), and use
+the current model choices printed by onboarding rather than copying an old model
+slug into the Nix configuration.
 
 For an existing server, NemoClaw detects vLLM at
 `http://localhost:8000/v1`. The endpoint must also be reachable from the

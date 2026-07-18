@@ -13,6 +13,24 @@
       url = "github:graham33/nixos-dgx-spark";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    pyproject-nix = {
+      url = "github:pyproject-nix/pyproject.nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    uv2nix = {
+      url = "github:pyproject-nix/uv2nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.pyproject-nix.follows = "pyproject-nix";
+    };
+
+    pyproject-build-systems = {
+      url = "github:pyproject-nix/build-system-pkgs";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.pyproject-nix.follows = "pyproject-nix";
+      inputs.uv2nix.follows = "uv2nix";
+    };
   };
 
   outputs =
@@ -21,6 +39,9 @@
       nixpkgs,
       nemoclaw-src,
       dgx-spark,
+      pyproject-nix,
+      uv2nix,
+      pyproject-build-systems,
       ...
     }:
     let
@@ -29,17 +50,31 @@
         "x86_64-linux"
       ];
       forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
+      mkVllmPackage =
+        pkgs:
+        import ./nix/vllm.nix {
+          inherit
+            pkgs
+            pyproject-nix
+            uv2nix
+            pyproject-build-systems
+            supportedSystems
+            ;
+          lib = nixpkgs.lib;
+        };
       overlay = final: _prev: rec {
         openshell-nemoclaw = final.callPackage ./nix/openshell.nix { };
         nemoclaw = final.callPackage ./nix/nemoclaw.nix {
           src = nemoclaw-src;
           openshell = openshell-nemoclaw;
         };
+        vllm-nemoclaw = mkVllmPackage final;
       };
       pkgsFor =
         system:
         import nixpkgs {
           inherit system;
+          config.allowUnfree = true;
           overlays = [ overlay ];
         };
     in
@@ -55,6 +90,7 @@
           default = pkgs.nemoclaw;
           inherit (pkgs) nemoclaw;
           openshell = pkgs.openshell-nemoclaw;
+          vllm = pkgs.vllm-nemoclaw;
         }
       );
 
@@ -70,6 +106,10 @@
       nixosModules = {
         default = self.nixosModules.nemoclaw;
         nemoclaw = import ./nix/module.nix { inherit self; };
+        vllm = {
+          imports = [ ./nix/vllm-module.nix ];
+          nixpkgs.overlays = [ self.overlays.default ];
+        };
       };
 
       checks = forAllSystems (
@@ -103,6 +143,33 @@
             ];
           };
           cfg = moduleEvaluation.config;
+          vllmModuleEvaluation = nixpkgs.lib.nixosSystem {
+            inherit system;
+            modules = [
+              self.nixosModules.vllm
+              {
+                nixpkgs.config.allowUnfree = true;
+
+                services.nemoclawVllm = {
+                  enable = true;
+                  model = "example/model";
+                  activeProfile = "agent";
+                  profiles.agent = {
+                    gpuMemoryUtilization = 0.8;
+                    maxModelLen = 32768;
+                    maxNumSeqs = 4;
+                    maxNumBatchedTokens = 8192;
+                    enablePrefixCaching = true;
+                    enableChunkedPrefill = true;
+                    toolCallParser = "example_parser";
+                    environment.VLLM_TEST_PROFILE = "agent";
+                  };
+                };
+                system.stateVersion = "25.11";
+              }
+            ];
+          };
+          vllmCfg = vllmModuleEvaluation.config;
           moduleContract =
             assert cfg.virtualisation.podman.enable;
             assert !cfg.virtualisation.podman.dockerCompat;
@@ -111,9 +178,26 @@
             assert cfg.hardware.nvidia-container-toolkit.enable;
             assert builtins.elem "docker" cfg.users.users.tester.extraGroups;
             pkgs.writeText "nemoclaw-module-contract" "ok\n";
+          vllmModuleContract =
+            assert nixpkgs.lib.getVersion vllmCfg.services.nemoclawVllm.package == "0.25.1";
+            assert vllmCfg.services.nemoclawVllm.activeProfile == "agent";
+            assert
+              vllmCfg.systemd.services.nemoclaw-vllm.serviceConfig.ExecStart
+              == "${vllmCfg.services.nemoclawVllm.launcherPackage}/bin/nemoclaw-vllm-serve";
+            assert
+              vllmCfg.systemd.services.nemoclaw-vllm.environment.VLLM_CACHE_ROOT
+              == "/var/cache/nemoclaw-vllm/vllm";
+            assert builtins.elem "render" vllmCfg.users.users.nemoclaw-vllm.extraGroups;
+            assert builtins.elem "video" vllmCfg.users.users.nemoclaw-vllm.extraGroups;
+            assert !(builtins.elem 8000 vllmCfg.networking.firewall.allowedTCPPorts);
+            pkgs.writeText "nemoclaw-vllm-module-contract" "ok\n";
+          vllmSmoke = pkgs.runCommand "nemoclaw-vllm-smoke" { nativeBuildInputs = [ pkgs.vllm-nemoclaw ]; } ''
+            python -c 'import vllm; assert vllm.__version__ == "0.25.1"'
+            touch "$out"
+          '';
         in
         {
-          inherit moduleContract;
+          inherit moduleContract vllmModuleContract vllmSmoke;
           package = pkgs.nemoclaw;
           openshell = pkgs.openshell-nemoclaw;
           smoke =

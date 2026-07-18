@@ -5,14 +5,18 @@ Community-maintained Nix packages and a NixOS module for
 officially supported NemoClaw installation path. NixOS remains outside
 NemoClaw's validated platform matrix.
 
-The flake pins NemoClaw `v0.0.86` together with the exact OpenShell `v0.0.85`
-CLI, gateway, and sandbox binaries required by that release. It supports
-`aarch64-linux` and `x86_64-linux`. The pinned Hermes manifest expects Hermes
-`0.18.0` inside the sandbox.
+The flake pins NemoClaw `v0.0.86`, the exact OpenShell `v0.0.85` CLI, gateway,
+and sandbox binaries required by that release, and a Python 3.12 vLLM `0.25.1`
+environment. It supports `aarch64-linux` and `x86_64-linux`. The pinned Hermes
+manifest expects Hermes `0.18.0` inside the sandbox.
 
-Current validation is asymmetric. The ARM64 derivations and the combined
-`nixos-dgx-spark` module configuration evaluate successfully, but have not been
-built or run on a physical DGX Spark. An `x86_64-linux` host completed live
+Current validation is asymmetric. The aarch64 vLLM output built and served
+`Qwen/Qwen2.5-0.5B-Instruct` natively on a physical DGX Spark GB10 (compute
+capability 12.1). Health, model-list, and OpenAI-compatible chat requests all
+returned HTTP 200; warm eager-mode requests generated about 106 tokens/s. The
+combined `nixos-dgx-spark` module configuration evaluates, but was not activated
+during that package test. The vLLM environment also builds and serves the same
+model on x86_64 with an RTX 5060 Ti. An `x86_64-linux` host completed live
 OpenClaw onboarding with a Ready sandbox, NemoClaw `0.0.86`, OpenShell `0.0.85`,
 OpenClaw `2026.6.10`, and a healthy local vLLM route. That proves the shared
 package, Docker, and OpenShell path, but it is not a live Hermes validation.
@@ -27,11 +31,76 @@ Run the CLI without installing it:
 nix run github:benthecarman/nemoclaw-nix -- --help
 ```
 
-The flake exports `nemoclaw` and `openshell` packages. The NemoClaw wrapper puts
-its matched OpenShell binaries and required host tools on `PATH`; it does not
-download or replace OpenShell during onboarding. The package alone does not
-configure a container daemon: when using it without the NixOS module, provide a
-real Docker daemon and grant the invoking account access to it.
+The flake exports `nemoclaw`, `openshell`, and `vllm` packages. The NemoClaw
+wrapper puts its matched OpenShell binaries and required host tools on `PATH`;
+it does not download or replace OpenShell during onboarding. The package alone
+does not configure a container daemon: when using it without the NixOS module,
+provide a real Docker daemon and grant the invoking account access to it.
+
+The vLLM output is generated from [`vllm/uv.lock`](vllm/uv.lock), including its
+Python, PyTorch, and CUDA-wheel dependency graph:
+
+```console
+nix build github:benthecarman/nemoclaw-nix#vllm
+result/bin/python -c 'import vllm; print(vllm.__version__)'
+```
+
+`libcuda.so.1` deliberately remains a runtime dependency of the host NVIDIA
+driver. A successful package build or import is not evidence that a model can
+serve on a particular GPU. On SM121, FlashInfer compiles missing architecture-
+specific kernels on first startup. The package therefore includes a pinned Nix
+CUDA 13.0 JIT toolchain (nvcc, headers, compiler, and Ninja) while continuing to
+use the host driver at runtime. See the
+[Spark qualification record](docs/spark-vllm-qualification.md).
+
+## Declarative vLLM service
+
+The `nixosModules.vllm` module turns a named serving profile into an immutable
+launcher and systemd service. It accepts any model identifier or local model
+path supported by vLLM; the package is model-agnostic.
+
+```nix
+{
+  imports = [ nemoclaw-nix.nixosModules.vllm ];
+
+  # Required by the NVIDIA CUDA compiler packages used for native GPU kernels.
+  nixpkgs.config.allowUnfree = true;
+
+  services.nemoclawVllm = {
+    enable = true;
+    model = "your-org/your-model";
+    servedModelName = "local-agent-model";
+    activeProfile = "balanced";
+
+    profiles = {
+      baseline = { };
+      balanced = {
+        gpuMemoryUtilization = 0.82;
+        maxModelLen = 32768;
+        maxNumSeqs = 4;
+        maxNumBatchedTokens = 8192;
+        enablePrefixCaching = true;
+        enableChunkedPrefill = true;
+      };
+    };
+  };
+}
+```
+
+The module does not open port `8000` in the host firewall. It runs under a
+dedicated account, keeps caches and model state outside the Nix store, supports
+root-managed secret environment files, and renders profile arguments into a
+read-only store path. Extra `fixedArgs` are intentionally administrator-owned:
+an optimizing agent should propose a Nix profile change for review rather than
+mutating the running command line.
+
+Useful checks after a rebuild:
+
+```console
+systemctl status nemoclaw-vllm
+journalctl -u nemoclaw-vllm -f
+curl http://127.0.0.1:8000/v1/models
+```
 
 ## NixOS with nixos-dgx-spark
 
