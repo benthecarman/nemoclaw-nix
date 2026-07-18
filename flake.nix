@@ -270,6 +270,7 @@
             assert nixclawCfg.systemd.services.nixclaw-broker.serviceConfig.User == "nixclaw-broker";
             assert nixclawCfg.systemd.services.nixclaw-activator.serviceConfig.User == "root";
             assert nixclawCfg.services.nixclaw.activator.leaseSeconds == 300;
+            assert nixclawCfg.services.nixclaw.activator.maxResultBytes == 2097152;
             assert nixclawCfg.services.nixclaw.health.timeoutSeconds == 120;
             assert !nixclawCfg.systemd.services.nixclaw-activator.serviceConfig.ProtectHome;
             assert !(builtins.elem 8787 nixclawCfg.networking.firewall.allowedTCPPorts);

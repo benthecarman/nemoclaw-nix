@@ -104,6 +104,7 @@ let
       brokerGroup = "nixclaw-broker";
       leaseSeconds = cfg.activator.leaseSeconds;
       commandTimeoutSeconds = cfg.activator.commandTimeoutSeconds;
+      maxResultBytes = cfg.activator.maxResultBytes;
       healthTimeoutSeconds = cfg.health.timeoutSeconds;
       healthServices = cfg.health.services;
       healthUrls = cfg.health.urls;
@@ -185,6 +186,11 @@ in
       commandTimeoutSeconds = lib.mkOption {
         type = lib.types.ints.positive;
         default = 600;
+      };
+      maxResultBytes = lib.mkOption {
+        type = lib.types.ints.positive;
+        default = 2097152;
+        description = "Maximum record-results request size in bytes.";
       };
     };
     cluster.nodes = lib.mkOption {

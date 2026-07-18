@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nixclaw.dev/schemas/v1/experiment-results.schema.json",
+  "title": "ExperimentResultsV1",
+  "type": "object",
+  "required": ["baselineBenchmark", "candidateBenchmark", "decision"],
+  "properties": {
+    "baselineBenchmark": { "$ref": "benchmark-result.schema.json" },
+    "candidateBenchmark": { "$ref": "benchmark-result.schema.json" },
+    "decision": { "$ref": "experiment-decision.schema.json" }
+  },
+  "additionalProperties": false
+}

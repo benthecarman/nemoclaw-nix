@@ -11,6 +11,29 @@ from pathlib import Path
 
 from .common import NixClawError, append_audit, atomic_json, generation_id, load_json, now, validate_candidate_id, validate_store_path
 
+BENCHMARK_FIELDS = {
+    "environmentFingerprint", "workloadId", "servedModel", "generation", "profileHash",
+    "warmupCount", "measuredRunCount", "samples", "requestsAttempted", "requestsSucceeded",
+    "inputTokens", "outputTokens", "outputTokensPerSecond", "ttftMs", "interTokenLatencyMs",
+    "structuredOutputCorrect", "toolCallCorrect", "healthFailures", "restarts", "ooms",
+    "ncclErrors", "criticalMemoryPressure",
+}
+DECISION_FIELDS = {
+    "accepted", "baseline", "candidate", "percentageDeltas", "passedGates", "failedGates",
+    "explanations",
+}
+DECISION_GATES = {
+    "throughput_improvement", "request_success", "correctness", "ttft_regression",
+    "inter_token_regression", "runtime_health",
+}
+
+
+def require_exact_keys(value, expected, name):
+    if not isinstance(value, dict): raise NixClawError(f"{name} must be a JSON object")
+    missing = expected - value.keys(); unknown = value.keys() - expected
+    if missing: raise NixClawError(f"{name} is missing fields: {', '.join(sorted(missing))}")
+    if unknown: raise NixClawError(f"{name} has unknown fields: {', '.join(sorted(unknown))}")
+
 
 class Activator:
     def __init__(self, config):
@@ -23,14 +46,15 @@ class Activator:
         self.lock = threading.Lock()
         threading.Thread(target=self._lease_monitor, daemon=True).start()
 
-    def operate(self, operation, identifier):
+    def operate(self, operation, identifier, request=None):
         validate_candidate_id(identifier)
-        if operation not in {"review", "approve", "confirm", "rollback"}:
+        if operation not in {"review", "approve", "record-results", "confirm", "rollback"}:
             raise NixClawError("unknown operation")
         with self.lock:
             record = self._record(identifier)
             if operation == "review": return self._review(record)
             if operation == "approve": return self._approve(record)
+            if operation == "record-results": return self._record_results(record, request or {})
             if operation == "confirm": return self._confirm(record)
             return self._rollback(record, "operator requested rollback")
 
@@ -82,6 +106,8 @@ class Activator:
 
     def _confirm(self, record):
         if record.get("state") not in {"active", "measuring"}: raise NixClawError("candidate is not active")
+        if record.get("kind") == "experiment" and not record.get("decision", {}).get("accepted"):
+            raise NixClawError("candidate requires an accepted benchmark decision before confirmation")
         generation = validate_store_path(record.get("generationPath"))
         for node in self._activation_order():
             self._health(node)
@@ -89,6 +115,105 @@ class Activator:
         record["state"] = "accepted"; record.pop("leaseExpiresAt", None); self._save(record)
         (self.leases / f"{record['id']}.json").unlink(missing_ok=True)
         return self._review(record)
+
+    def _record_results(self, record, request):
+        if record.get("kind") != "experiment":
+            raise NixClawError("benchmark results can only be attached to experiments")
+        if record.get("state") not in {"active", "measuring", "accepted"}:
+            raise NixClawError("candidate is not active, measuring, or accepted")
+        require_exact_keys(
+            request,
+            {"operation", "id", "baselineBenchmark", "candidateBenchmark", "decision"},
+            "record-results request",
+        )
+        baseline = request["baselineBenchmark"]
+        candidate = request["candidateBenchmark"]
+        decision = request["decision"]
+        require_exact_keys(baseline, BENCHMARK_FIELDS, "baseline benchmark")
+        require_exact_keys(candidate, BENCHMARK_FIELDS, "candidate benchmark")
+        require_exact_keys(decision, DECISION_FIELDS, "experiment decision")
+        self._validate_results(record, baseline, candidate, decision)
+
+        attached = (record.get("baselineBenchmark"), record.get("candidateBenchmark"), record.get("decision"))
+        incoming = (baseline, candidate, decision)
+        if any(value is not None for value in attached):
+            if attached != incoming: raise NixClawError("experiment results are already attached with different content")
+            return self._review(record)
+        if record["state"] == "accepted" and not decision["accepted"]:
+            raise NixClawError("an accepted experiment requires an accepted benchmark decision")
+        record["baselineBenchmark"] = baseline
+        record["candidateBenchmark"] = candidate
+        record["decision"] = decision
+        if record["state"] == "active": record["state"] = "measuring"
+        self._save(record)
+        return self._review(record)
+
+    def _validate_results(self, record, baseline, candidate, decision):
+        expected = [
+            (baseline, "workloadId", record["workloadId"], "baseline workload"),
+            (candidate, "workloadId", record["workloadId"], "candidate workload"),
+            (baseline, "generation", record["baseGeneration"], "baseline generation"),
+            (candidate, "generation", record["candidateGeneration"], "candidate generation"),
+            (baseline, "profileHash", record["originalProfileHash"], "baseline profile hash"),
+            (candidate, "profileHash", record["candidateProfileHash"], "candidate profile hash"),
+        ]
+        for value, key, wanted, name in expected:
+            if value.get(key) != wanted: raise NixClawError(f"{name} does not match the experiment")
+        if baseline.get("environmentFingerprint") != candidate.get("environmentFingerprint"):
+            raise NixClawError("benchmark environment fingerprints do not match")
+        if baseline.get("servedModel") != candidate.get("servedModel"):
+            raise NixClawError("benchmark served models do not match")
+
+        for name, result in (("baseline", baseline), ("candidate", candidate)):
+            for field in ("outputTokensPerSecond", "ttftMs", "interTokenLatencyMs"):
+                require_exact_keys(result.get(field), {"median", "p95"}, f"{name} {field}")
+        require_exact_keys(decision.get("baseline"), {"outputTokensPerSecond", "ttftMs", "interTokenLatencyMs"}, "decision baseline")
+        require_exact_keys(decision.get("candidate"), {"outputTokensPerSecond", "ttftMs", "interTokenLatencyMs"}, "decision candidate")
+        expected_summary = lambda result: {
+            "outputTokensPerSecond": result["outputTokensPerSecond"]["median"],
+            "ttftMs": result["ttftMs"]["p95"],
+            "interTokenLatencyMs": result["interTokenLatencyMs"]["p95"],
+        }
+        if decision["baseline"] != expected_summary(baseline):
+            raise NixClawError("decision baseline metrics do not match the benchmark")
+        if decision["candidate"] != expected_summary(candidate):
+            raise NixClawError("decision candidate metrics do not match the benchmark")
+        changes = {
+            name: ((decision["candidate"][name] - decision["baseline"][name]) / decision["baseline"][name]) * 100
+            for name in decision["baseline"]
+            if decision["baseline"][name] != 0
+        }
+        supplied_changes = decision.get("percentageDeltas")
+        if not isinstance(supplied_changes, dict) or supplied_changes.keys() != changes.keys():
+            raise NixClawError("decision percentage deltas do not match the benchmark")
+        if any(abs(supplied_changes[name] - value) > 1e-6 for name, value in changes.items()):
+            raise NixClawError("decision percentage deltas do not match the benchmark")
+
+        healthy = (
+            candidate["healthFailures"] == 0
+            and candidate["restarts"] == 0
+            and candidate["ooms"] == 0
+            and candidate["ncclErrors"] == 0
+            and not candidate["criticalMemoryPressure"]
+        )
+        gate_results = {
+            "throughput_improvement": changes.get("outputTokensPerSecond", float("-inf")) >= 3,
+            "request_success": candidate["requestsAttempted"] > 0 and candidate["requestsSucceeded"] == candidate["requestsAttempted"],
+            "correctness": candidate["structuredOutputCorrect"] and candidate["toolCallCorrect"],
+            "ttft_regression": changes.get("ttftMs", float("inf")) <= 10,
+            "inter_token_regression": changes.get("interTokenLatencyMs", float("inf")) <= 10,
+            "runtime_health": healthy,
+        }
+        passed = decision.get("passedGates"); failed = decision.get("failedGates")
+        if not isinstance(passed, list) or not isinstance(failed, list):
+            raise NixClawError("decision gates must be arrays")
+        if set(passed) | set(failed) != DECISION_GATES or set(passed) & set(failed):
+            raise NixClawError("decision gates do not form the required partition")
+        expected_passed = {name for name, value in gate_results.items() if value}
+        if set(passed) != expected_passed:
+            raise NixClawError("decision gate outcomes do not match the benchmarks")
+        if decision.get("accepted") != (not failed):
+            raise NixClawError("decision acceptance does not match its failed gates")
 
     def _rollback(self, record, reason):
         if record.get("state") not in {"active", "measuring", "accepted"}: raise NixClawError("candidate is not active or accepted")
@@ -181,11 +306,19 @@ class Activator:
 class RequestHandler(socketserver.StreamRequestHandler):
     def handle(self):
         try:
-            raw = self.rfile.readline(4097)
-            if len(raw) > 4096: raise NixClawError("request is too large")
+            maximum = self.server.activator.config["maxResultBytes"]
+            raw = self.rfile.readline(maximum + 1)
+            if len(raw) > maximum: raise NixClawError("request is too large")
             request = json.loads(raw)
-            if set(request) != {"operation", "id"}: raise NixClawError("request must contain only operation and id")
-            data = self.server.activator.operate(request["operation"], request["id"])
+            if not isinstance(request, dict): raise NixClawError("request must be a JSON object")
+            operation = request.get("operation")
+            expected = (
+                {"operation", "id", "baselineBenchmark", "candidateBenchmark", "decision"}
+                if operation == "record-results"
+                else {"operation", "id"}
+            )
+            require_exact_keys(request, expected, "activator request")
+            data = self.server.activator.operate(operation, request["id"], request)
             response = {"ok": True, "data": data}
         except Exception as error:
             response = {"ok": False, "error": str(error)}

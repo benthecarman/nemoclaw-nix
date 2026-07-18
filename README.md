@@ -146,6 +146,10 @@ operators to the configured `nixclaw-operators` group, then use:
 ```console
 nixclawctl review <experiment-uuid>
 nixclawctl approve <experiment-uuid>
+nixclawctl record-results <experiment-uuid> \
+  --baseline baseline.json \
+  --candidate candidate.json \
+  --decision decision.json
 nixclawctl confirm <experiment-uuid>
 nixclawctl rollback <experiment-uuid>
 ```
@@ -153,7 +157,10 @@ nixclawctl rollback <experiment-uuid>
 Approval activates workers before the head, runs the declared systemd and HTTP
 health checks, and starts a five-minute lease. An activation failure or expired
 lease restores the recorded generations in reverse order. Confirmation checks
-health again and makes the candidate the boot generation.
+health again and makes the candidate the boot generation. Confirmation also
+requires operator-attached benchmark results with an accepted decision. The
+activator verifies that their workload, environment, generations, profile
+hashes, metric summaries, and decision gates match the reviewed experiment.
 
 Reviewed proposals accept unified diffs up to 64 KiB and only paths listed in
 `services.nixclaw.broker.editablePaths`. The host flake must already import

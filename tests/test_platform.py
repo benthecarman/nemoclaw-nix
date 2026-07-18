@@ -91,8 +91,12 @@ class ActivatorTests(unittest.TestCase):
         self.identifier = "7a938cb2-7181-4df6-84cc-86bc474d083e"
         self.record_path = root / "broker/candidates" / f"{self.identifier}.json"
         atomic_json(self.record_path, {
-            "id": self.identifier, "state": "awaitingApproval",
+            "id": self.identifier, "kind": "experiment", "state": "awaitingApproval",
             "baseGeneration": generation_id("/nix/store/old-generation"),
+            "candidateGeneration": "nixos-candidate",
+            "workloadId": "agent-tools",
+            "originalProfileHash": "sha256:baseline",
+            "candidateProfileHash": "sha256:candidate",
             "generationPath": "/nix/store/new-generation", "createdAt": now(), "updatedAt": now(),
         })
         import grp, os
@@ -108,6 +112,73 @@ class ActivatorTests(unittest.TestCase):
 
     def tearDown(self): self.temporary.cleanup()
 
+    def benchmark(self, generation, profile_hash, throughput, ttft, latency):
+        return {
+            "environmentFingerprint": "sha256:environment",
+            "workloadId": "agent-tools",
+            "servedModel": "model",
+            "generation": generation,
+            "profileHash": profile_hash,
+            "warmupCount": 1,
+            "measuredRunCount": 3,
+            "samples": [],
+            "requestsAttempted": 12,
+            "requestsSucceeded": 12,
+            "inputTokens": 100,
+            "outputTokens": 20,
+            "outputTokensPerSecond": {"median": throughput, "p95": throughput},
+            "ttftMs": {"median": ttft, "p95": ttft},
+            "interTokenLatencyMs": {"median": latency, "p95": latency},
+            "structuredOutputCorrect": True,
+            "toolCallCorrect": True,
+            "healthFailures": 0,
+            "restarts": 0,
+            "ooms": 0,
+            "ncclErrors": 0,
+            "criticalMemoryPressure": False,
+        }
+
+    def results_request(self):
+        baseline = self.benchmark(
+            generation_id("/nix/store/old-generation"), "sha256:baseline", 100.0, 200.0, 20.0,
+        )
+        candidate = self.benchmark("nixos-candidate", "sha256:candidate", 120.0, 150.0, 15.0)
+        decision = {
+            "accepted": True,
+            "baseline": {
+                "outputTokensPerSecond": 100.0,
+                "ttftMs": 200.0,
+                "interTokenLatencyMs": 20.0,
+            },
+            "candidate": {
+                "outputTokensPerSecond": 120.0,
+                "ttftMs": 150.0,
+                "interTokenLatencyMs": 15.0,
+            },
+            "percentageDeltas": {
+                "outputTokensPerSecond": 20.0,
+                "ttftMs": -25.0,
+                "interTokenLatencyMs": -25.0,
+            },
+            "passedGates": [
+                "throughput_improvement",
+                "request_success",
+                "correctness",
+                "ttft_regression",
+                "inter_token_regression",
+                "runtime_health",
+            ],
+            "failedGates": [],
+            "explanations": ["all gates passed"],
+        }
+        return {
+            "operation": "record-results",
+            "id": self.identifier,
+            "baselineBenchmark": baseline,
+            "candidateBenchmark": candidate,
+            "decision": decision,
+        }
+
     @patch("nixclaw_platform.activator.os.chown")
     @patch("nixclaw_platform.activator.validate_store_path", return_value="/nix/store/new-generation")
     def test_approve_workers_first_and_confirm(self, _validate, _chown):
@@ -115,9 +186,32 @@ class ActivatorTests(unittest.TestCase):
         self.assertEqual(approved["state"], "active")
         prepares = [action[1] for action in self.activator.actions if action[0] == "prepare"]
         self.assertEqual(prepares, ["worker", "head"])
+        with self.assertRaisesRegex(NixClawError, "accepted benchmark decision"):
+            self.activator.operate("confirm", self.identifier)
+        measured = self.activator.operate("record-results", self.identifier, self.results_request())
+        self.assertEqual(measured["state"], "measuring")
         confirmed = self.activator.operate("confirm", self.identifier)
         self.assertEqual(confirmed["state"], "accepted")
         self.assertEqual([action[1] for action in self.activator.actions if action[0] == "persist"], ["worker", "head"])
+
+    @patch("nixclaw_platform.activator.os.chown")
+    @patch("nixclaw_platform.activator.validate_store_path", return_value="/nix/store/new-generation")
+    def test_record_results_rejects_mismatched_candidate(self, _validate, _chown):
+        self.activator.operate("approve", self.identifier)
+        request = self.results_request()
+        request["candidateBenchmark"]["generation"] = "nixos-other"
+        with self.assertRaisesRegex(NixClawError, "candidate generation"):
+            self.activator.operate("record-results", self.identifier, request)
+
+    @patch("nixclaw_platform.activator.os.chown")
+    @patch("nixclaw_platform.activator.validate_store_path", return_value="/nix/store/new-generation")
+    def test_reviewed_proposal_does_not_require_benchmarks(self, _validate, _chown):
+        record = load_json(self.record_path)
+        record["kind"] = "proposal"
+        atomic_json(self.record_path, record)
+        self.activator.operate("approve", self.identifier)
+        confirmed = self.activator.operate("confirm", self.identifier)
+        self.assertEqual(confirmed["state"], "accepted")
 
     @patch("nixclaw_platform.activator.os.chown")
     @patch("nixclaw_platform.activator.validate_store_path", return_value="/nix/store/new-generation")
