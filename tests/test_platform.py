@@ -155,6 +155,18 @@ class ActivatorTests(unittest.TestCase):
         audit = (Path(self.temporary.name) / "activator/audit.jsonl").read_text()
         self.assertIn("switchReportedFailedUnits", audit)
 
+    def test_switch_rejects_failed_activation_script(self):
+        error = subprocess.CalledProcessError(
+            4,
+            ["switch-to-configuration", "test"],
+            stderr="Failed to run activate script",
+        )
+        node = self.config["nodes"][1]
+
+        with patch.object(self.activator, "_remote", side_effect=error):
+            with self.assertRaisesRegex(NixClawError, "activation script failed"):
+                Activator._switch(self.activator, node, "/nix/store/new-generation", "test")
+
     def test_health_retries_transient_service_failure(self):
         node = self.config["nodes"][1]
         self.activator.config["healthServices"] = ["nemoclaw-vllm.service"]

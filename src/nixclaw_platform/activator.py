@@ -128,6 +128,8 @@ class Activator:
             if error.returncode != 4:
                 raise
             details = (error.stderr or error.stdout or str(error))[-4000:]
+            if "Failed to run activate script" in details:
+                raise NixClawError(f"NixOS activation script failed: {details}") from error
             append_audit(self.audit, {
                 "at": now(), "event": "switchReportedFailedUnits",
                 "node": node["id"], "details": details,

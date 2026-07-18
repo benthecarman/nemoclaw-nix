@@ -209,7 +209,7 @@ in
       };
       timeoutSeconds = lib.mkOption {
         type = lib.types.ints.positive;
-        default = 30;
+        default = 120;
       };
     };
     facts.gpus = lib.mkOption {
@@ -300,7 +300,7 @@ in
         RestartSec = 5;
         UMask = "0007";
         PrivateTmp = true;
-        ProtectHome = true;
+        ProtectHome = false;
       };
     };
   };
