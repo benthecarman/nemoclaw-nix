@@ -63,8 +63,8 @@ class Activator:
                 if generation_id(previous[node["id"]]) != record["baseGeneration"]:
                     raise NixClawError(f"node {node['id']} has a stale base generation")
                 self._prepare(node, generation)
-                self._switch(node, generation, "test")
                 activated.append(node)
+                self._switch(node, generation, "test")
                 self._health(node)
             record["previousGenerations"] = previous
             record["state"] = "active"

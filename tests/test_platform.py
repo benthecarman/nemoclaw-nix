@@ -5,7 +5,7 @@ from pathlib import Path
 
 from nixclaw_platform.activator import Activator
 from nixclaw_platform.broker import Broker
-from nixclaw_platform.common import NixClawError, atomic_json, candidate_id, generation_id, now, require_uuid
+from nixclaw_platform.common import NixClawError, atomic_json, candidate_id, generation_id, load_json, now, require_uuid
 
 
 class BrokerContractTests(unittest.TestCase):
@@ -117,6 +117,28 @@ class ActivatorTests(unittest.TestCase):
         confirmed = self.activator.operate("confirm", self.identifier)
         self.assertEqual(confirmed["state"], "accepted")
         self.assertEqual([action[1] for action in self.activator.actions if action[0] == "persist"], ["worker", "head"])
+
+    @patch("nixclaw_platform.activator.os.chown")
+    @patch("nixclaw_platform.activator.validate_store_path", return_value="/nix/store/new-generation")
+    def test_switch_failure_rolls_back_partial_activation(self, _validate, _chown):
+        def partially_failing_switch(node, generation, mode):
+            self.activator.actions.append(("switch", node["id"], generation, mode))
+            if generation == "/nix/store/new-generation":
+                raise RuntimeError("partial switch")
+
+        with patch.object(self.activator, "_switch", side_effect=partially_failing_switch):
+            with self.assertRaisesRegex(RuntimeError, "partial switch"):
+                self.activator.operate("approve", self.identifier)
+
+        switches = [action for action in self.activator.actions if action[0] == "switch"]
+        self.assertEqual(
+            switches,
+            [
+                ("switch", "worker", "/nix/store/new-generation", "test"),
+                ("switch", "worker", "/nix/store/old-generation", "test"),
+            ],
+        )
+        self.assertEqual(load_json(self.record_path)["state"], "rolledBack")
 
 
 class SchemaTests(unittest.TestCase):
