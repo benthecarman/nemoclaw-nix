@@ -1,7 +1,8 @@
+import subprocess
 import tempfile
 import unittest
-from unittest.mock import patch
 from pathlib import Path
+from unittest.mock import patch
 
 from nixclaw_platform.activator import Activator
 from nixclaw_platform.broker import Broker
@@ -139,6 +140,32 @@ class ActivatorTests(unittest.TestCase):
             ],
         )
         self.assertEqual(load_json(self.record_path)["state"], "rolledBack")
+
+    def test_switch_status_four_defers_to_health_checks(self):
+        error = subprocess.CalledProcessError(
+            4,
+            ["switch-to-configuration", "test"],
+            stderr="warning: a unit entered auto-restart",
+        )
+        node = self.config["nodes"][1]
+
+        with patch.object(self.activator, "_remote", side_effect=error):
+            Activator._switch(self.activator, node, "/nix/store/new-generation", "test")
+
+        audit = (Path(self.temporary.name) / "activator/audit.jsonl").read_text()
+        self.assertIn("switchReportedFailedUnits", audit)
+
+    def test_health_retries_transient_service_failure(self):
+        node = self.config["nodes"][1]
+        self.activator.config["healthServices"] = ["nemoclaw-vllm.service"]
+        transient = subprocess.CalledProcessError(3, ["systemctl", "is-active"])
+        healthy = subprocess.CompletedProcess([], 0, stdout="", stderr="")
+
+        with patch.object(self.activator, "_remote", side_effect=[transient, healthy, healthy]) as remote:
+            with patch("nixclaw_platform.activator.time.sleep"):
+                Activator._health(self.activator, node)
+
+        self.assertEqual(remote.call_count, 3)
 
 
 class SchemaTests(unittest.TestCase):

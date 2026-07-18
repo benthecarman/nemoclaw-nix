@@ -122,7 +122,16 @@ class Activator:
         if not generation.startswith("/nix/store/"): raise NixClawError("unsafe generation path")
         command = [generation + "/bin/switch-to-configuration", mode]
         if not node["local"]: command.insert(0, "sudo")
-        self._remote(node, command)
+        try:
+            self._remote(node, command)
+        except subprocess.CalledProcessError as error:
+            if error.returncode != 4:
+                raise
+            details = (error.stderr or error.stdout or str(error))[-4000:]
+            append_audit(self.audit, {
+                "at": now(), "event": "switchReportedFailedUnits",
+                "node": node["id"], "details": details,
+            })
 
     def _persist(self, node, generation):
         command = ["nix-env", "--profile", "/nix/var/nix/profiles/system", "--set", generation]
@@ -131,14 +140,25 @@ class Activator:
         self._switch(node, generation, "boot")
 
     def _health(self, node):
-        for service in self.config["healthServices"]:
-            self._remote(node, ["systemctl", "is-active", "--quiet", service])
-        for url in self.config["healthUrls"] if node["role"] == "head" else []:
-            if node["local"]:
-                with urllib.request.urlopen(url, timeout=self.config["healthTimeoutSeconds"]) as response:
-                    if response.status >= 400: raise NixClawError(f"health check failed: {url}")
-            else:
-                self._remote(node, ["curl", "--fail", "--silent", "--show-error", "--max-time", str(self.config["healthTimeoutSeconds"]), url])
+        deadline = time.monotonic() + self.config["healthTimeoutSeconds"]
+        last_error = None
+        while time.monotonic() < deadline:
+            try:
+                for service in self.config["healthServices"]:
+                    self._remote(node, ["systemctl", "is-active", "--quiet", service])
+                for url in self.config["healthUrls"] if node["role"] == "head" else []:
+                    if node["local"]:
+                        with urllib.request.urlopen(url, timeout=5) as response:
+                            if response.status >= 400: raise NixClawError(f"health check failed: {url}")
+                    else:
+                        self._remote(node, ["curl", "--fail", "--silent", "--show-error", "--max-time", "5", url])
+                failed = self._remote(node, ["systemctl", "--failed", "--no-legend", "--plain"])
+                if failed.stdout.strip(): raise NixClawError(f"failed systemd units: {failed.stdout.strip()}")
+                return
+            except Exception as error:
+                last_error = error
+                time.sleep(1)
+        raise NixClawError(f"health checks did not pass before the deadline: {last_error}") from last_error
 
     def _lease_monitor(self):
         while True:
