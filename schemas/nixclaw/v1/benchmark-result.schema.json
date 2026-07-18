@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nixclaw.dev/schemas/v1/benchmark-result.schema.json",
+  "title": "BenchmarkResultV1",
+  "type": "object",
+  "required": ["environmentFingerprint", "workloadId", "servedModel", "generation", "profileHash", "warmupCount", "measuredRunCount", "samples", "requestsAttempted", "requestsSucceeded", "inputTokens", "outputTokens", "outputTokensPerSecond", "ttftMs", "interTokenLatencyMs", "structuredOutputCorrect", "toolCallCorrect", "healthFailures", "restarts", "ooms", "ncclErrors", "criticalMemoryPressure"],
+  "properties": {
+    "environmentFingerprint": { "type": "string" }, "workloadId": { "type": "string" }, "servedModel": { "type": "string" }, "generation": { "type": "string" }, "profileHash": { "type": "string" },
+    "warmupCount": { "type": "integer", "minimum": 0 }, "measuredRunCount": { "type": "integer", "minimum": 1 }, "samples": { "type": "array", "items": { "type": "object" } },
+    "requestsAttempted": { "type": "integer", "minimum": 0 }, "requestsSucceeded": { "type": "integer", "minimum": 0 }, "inputTokens": { "type": "integer", "minimum": 0 }, "outputTokens": { "type": "integer", "minimum": 0 },
+    "outputTokensPerSecond": { "$ref": "#/$defs/summary" }, "ttftMs": { "$ref": "#/$defs/summary" }, "interTokenLatencyMs": { "$ref": "#/$defs/summary" },
+    "structuredOutputCorrect": { "type": "boolean" }, "toolCallCorrect": { "type": "boolean" }, "healthFailures": { "type": "integer", "minimum": 0 }, "restarts": { "type": "integer", "minimum": 0 }, "ooms": { "type": "integer", "minimum": 0 }, "ncclErrors": { "type": "integer", "minimum": 0 }, "criticalMemoryPressure": { "type": "boolean" }
+  },
+  "$defs": { "summary": { "type": "object", "required": ["median", "p95"], "properties": { "median": { "type": "number" }, "p95": { "type": "number" } }, "additionalProperties": false } },
+  "additionalProperties": false
+}

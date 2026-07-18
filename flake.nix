@@ -69,6 +69,16 @@
           openshell = openshell-nemoclaw;
         };
         vllm-nemoclaw = mkVllmPackage final;
+        nixclaw-platform = final.python312Packages.callPackage ./nix/nixclaw-platform.nix {
+          inherit (final)
+            nix
+            patch
+            openssh
+            curl
+            systemd
+            coreutils
+            ;
+        };
       };
       pkgsFor =
         system:
@@ -91,6 +101,7 @@
           inherit (pkgs) nemoclaw;
           openshell = pkgs.openshell-nemoclaw;
           vllm = pkgs.vllm-nemoclaw;
+          inherit (pkgs) nixclaw-platform;
         }
       );
 
@@ -108,6 +119,13 @@
         nemoclaw = import ./nix/module.nix { inherit self; };
         vllm = {
           imports = [ ./nix/vllm-module.nix ];
+          nixpkgs.overlays = [ self.overlays.default ];
+        };
+        nixclaw = {
+          imports = [
+            ./nix/vllm-module.nix
+            ./nix/nixclaw-module.nix
+          ];
           nixpkgs.overlays = [ self.overlays.default ];
         };
       };
@@ -170,6 +188,36 @@
             ];
           };
           vllmCfg = vllmModuleEvaluation.config;
+          nixclawModuleEvaluation = nixpkgs.lib.nixosSystem {
+            inherit system;
+            modules = [
+              self.nixosModules.nixclaw
+              {
+                nixpkgs.config.allowUnfree = true;
+                networking.hostName = "nixclaw-test";
+                services.nemoclawVllm = {
+                  enable = true;
+                  model = "example/model";
+                  profiles.baseline.maxModelLen = 4096;
+                };
+                services.nixclaw = {
+                  enable = true;
+                  source = ./.;
+                  configurationName = "nixclaw-test";
+                  facts.gpus = [
+                    {
+                      model = "test-gpu";
+                      count = 1;
+                      computeCapability = "0.0";
+                      memoryBytes = 0;
+                    }
+                  ];
+                };
+                system.stateVersion = "25.11";
+              }
+            ];
+          };
+          nixclawCfg = nixclawModuleEvaluation.config;
           moduleContract =
             assert cfg.virtualisation.podman.enable;
             assert !cfg.virtualisation.podman.dockerCompat;
@@ -195,9 +243,35 @@
             python -c 'import vllm; assert vllm.__version__ == "0.25.1"'
             touch "$out"
           '';
+          nixclawModuleContract =
+            assert nixclawCfg.systemd.services.nixclaw-broker.serviceConfig.User == "nixclaw-broker";
+            assert nixclawCfg.systemd.services.nixclaw-activator.serviceConfig.User == "root";
+            assert nixclawCfg.services.nixclaw.activator.leaseSeconds == 300;
+            assert !(builtins.elem 8787 nixclawCfg.networking.firewall.allowedTCPPorts);
+            pkgs.writeText "nixclaw-module-contract" "ok\n";
+          nixclawTests =
+            pkgs.runCommand "nixclaw-platform-tests"
+              {
+                nativeBuildInputs = [ pkgs.python312 ];
+                src = ./.;
+              }
+              ''
+                cd "$src"
+                export PYTHONDONTWRITEBYTECODE=1
+                export PYTHONPATH="$src/src"
+                python -m unittest discover -s tests -v
+                touch "$out"
+              '';
         in
         {
-          inherit moduleContract vllmModuleContract vllmSmoke;
+          inherit
+            moduleContract
+            vllmModuleContract
+            vllmSmoke
+            nixclawModuleContract
+            nixclawTests
+            ;
+          nixclaw-platform = pkgs.nixclaw-platform;
           package = pkgs.nemoclaw;
           openshell = pkgs.openshell-nemoclaw;
           smoke =

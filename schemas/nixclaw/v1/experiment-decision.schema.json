@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nixclaw.dev/schemas/v1/experiment-decision.schema.json",
+  "title": "ExperimentDecisionV1",
+  "type": "object",
+  "required": ["accepted", "baseline", "candidate", "percentageDeltas", "passedGates", "failedGates", "explanations"],
+  "properties": {
+    "accepted": { "type": "boolean" }, "baseline": { "type": "object" }, "candidate": { "type": "object" }, "percentageDeltas": { "type": "object", "additionalProperties": { "type": "number" } },
+    "passedGates": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }, "failedGates": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }, "explanations": { "type": "array", "items": { "type": "string" } }
+  },
+  "additionalProperties": false
+}

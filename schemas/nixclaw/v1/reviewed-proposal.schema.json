@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nixclaw.dev/schemas/v1/reviewed-proposal.schema.json",
+  "title": "ReviewedProposalV1",
+  "type": "object",
+  "required": ["baseGeneration", "clientRequestId", "summary", "patch"],
+  "properties": {
+    "baseGeneration": { "type": "string", "minLength": 1 },
+    "clientRequestId": { "type": "string", "format": "uuid" },
+    "summary": { "type": "string", "minLength": 1, "maxLength": 2000 },
+    "patch": { "type": "string", "minLength": 1, "maxLength": 65536 }
+  },
+  "additionalProperties": false
+}

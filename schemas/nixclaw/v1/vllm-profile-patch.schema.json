@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nixclaw.dev/schemas/v1/vllm-profile-patch.schema.json",
+  "title": "VllmProfilePatchV1",
+  "type": "object",
+  "minProperties": 1,
+  "properties": {
+    "gpuMemoryUtilization": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+    "maxModelLen": { "type": "integer", "minimum": 1 },
+    "maxNumSeqs": { "type": ["integer", "null"], "minimum": 1 },
+    "maxNumBatchedTokens": { "type": ["integer", "null"], "minimum": 1 },
+    "tensorParallelSize": { "type": "integer", "minimum": 1 },
+    "pipelineParallelSize": { "type": "integer", "minimum": 1 },
+    "enablePrefixCaching": { "type": "boolean" },
+    "enableChunkedPrefill": { "type": ["boolean", "null"] },
+    "enforceEager": { "type": "boolean" },
+    "kvCacheDtype": { "type": ["string", "null"], "enum": ["auto", "fp8", "fp8_e4m3", "fp8_e5m2", null] }
+  },
+  "additionalProperties": false
+}

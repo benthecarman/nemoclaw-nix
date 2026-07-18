@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nixclaw-platform"
+version = "0.1.0"
+description = "Constrained NixOS candidate builder and generation activator"
+requires-python = ">=3.12"
+
+[project.scripts]
+nixclaw-broker = "nixclaw_platform.broker:main"
+nixclaw-activator = "nixclaw_platform.activator:main"
+nixclawctl = "nixclaw_platform.ctl:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

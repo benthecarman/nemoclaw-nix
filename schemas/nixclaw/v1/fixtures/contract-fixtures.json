@@ -1,0 +1,48 @@
+{
+  "createExperiment": {
+    "baseGeneration": "nixos-3a3a3a3a3a3a3a3a3a3a",
+    "workloadId": "interactive",
+    "hypothesis": "A smaller scheduler batch will reduce interactive latency.",
+    "profilePatch": { "maxNumBatchedTokens": 4096 },
+    "clientRequestId": "a04a3095-933a-47a1-bf3f-dccad7f67a29"
+  },
+  "acceptedCreationResponse": {
+    "schemaVersion": "1",
+    "requestId": "8e00bdcb-2189-40b7-b532-cb132ce4b823",
+    "data": {
+      "id": "45027fd5-ff6a-54c9-8b44-da59c9fd4224",
+      "state": "submitted",
+      "baseGeneration": "nixos-3a3a3a3a3a3a3a3a3a3a",
+      "workloadId": "interactive",
+      "hypothesis": "A smaller scheduler batch will reduce interactive latency.",
+      "profilePatch": { "maxNumBatchedTokens": 4096 },
+      "originalProfileHash": "sha256:example",
+      "createdAt": "2026-07-18T20:00:00Z",
+      "updatedAt": "2026-07-18T20:00:00Z"
+    }
+  },
+  "staleGenerationError": {
+    "schemaVersion": "1",
+    "requestId": "8e00bdcb-2189-40b7-b532-cb132ce4b823",
+    "error": { "code": "STALE_GENERATION", "message": "stale base generation", "details": {} }
+  },
+  "unknownFieldError": {
+    "schemaVersion": "1",
+    "requestId": "8e00bdcb-2189-40b7-b532-cb132ce4b823",
+    "error": { "code": "INVALID_REQUEST", "message": "unsupported profile fields: toolCallParser", "details": {} }
+  },
+  "awaitingApproval": {
+    "id": "45027fd5-ff6a-54c9-8b44-da59c9fd4224",
+    "state": "awaitingApproval",
+    "baseGeneration": "nixos-3a3a3a3a3a3a3a3a3a3a",
+    "candidateGeneration": "nixos-4b4b4b4b4b4b4b4b4b4b",
+    "workloadId": "interactive",
+    "hypothesis": "A smaller scheduler batch will reduce interactive latency.",
+    "profilePatch": { "maxNumBatchedTokens": 4096 },
+    "originalProfileHash": "sha256:original",
+    "candidateProfileHash": "sha256:candidate",
+    "validationFindings": ["schema", "bounds", "nix-evaluation"],
+    "createdAt": "2026-07-18T20:00:00Z",
+    "updatedAt": "2026-07-18T20:03:00Z"
+  }
+}

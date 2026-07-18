@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nixclaw.dev/schemas/v1/facts-response.schema.json",
+  "title": "FactsResponseV1",
+  "allOf": [
+    { "$ref": "common.schema.json#/$defs/response" },
+    { "properties": { "data": {
+      "type": "object",
+      "required": ["generation", "nixosRevision", "architecture", "gpu", "cpu", "memory", "clusterNodes", "vllmVersion", "servedModel", "activeProfileHash", "services"],
+      "properties": {
+        "generation": { "type": "string" }, "nixosRevision": { "type": "string" }, "architecture": { "type": "string" },
+        "gpu": { "type": "array", "items": { "type": "object" } }, "cpu": { "type": "object" }, "memory": { "type": "object" },
+        "clusterNodes": { "type": "array", "items": { "type": "object" } }, "vllmVersion": { "const": "0.25.1" }, "servedModel": { "type": "string" },
+        "activeProfileHash": { "type": "string" }, "services": { "type": "array", "items": { "type": "object" } }
+      }, "additionalProperties": false
+    } } }
+  ]
+}

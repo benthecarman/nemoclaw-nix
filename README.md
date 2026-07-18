@@ -102,6 +102,66 @@ journalctl -u nemoclaw-vllm -f
 curl http://127.0.0.1:8000/v1/models
 ```
 
+## Controlled NixOS improvement platform
+
+The `nixosModules.nixclaw` module adds the Person 1 platform described in
+[`HACKATHON_PLAN.md`](HACKATHON_PLAN.md): an unprivileged candidate-building
+broker and a root-only generation activator. Their contract follows the
+versioned schemas in [`schemas/nixclaw/v1`](schemas/nixclaw/v1) and the agreed
+[v1 API issue](https://github.com/benthecarman/nemoclaw-nix/issues/1).
+
+```nix
+{
+  imports = [ nemoclaw-nix.nixosModules.nixclaw ];
+
+  services.nemoclawVllm = {
+    enable = true;
+    model = "your-org/your-model";
+  };
+
+  services.nixclaw = {
+    enable = true;
+    source = ./.;
+    configurationName = "spark-01";
+    facts.gpus = [{
+      model = "NVIDIA GB10";
+      count = 1;
+      computeCapability = "12.1";
+      memoryBytes = 0; # Replace with the measured byte count.
+    }];
+  };
+}
+```
+
+The broker listens only on loopback by default and exposes versioned facts,
+configuration, experiment, and reviewed-proposal routes. Every response uses a
+`schemaVersion`/`requestId` envelope. Automatic experiments require a UUID
+`Idempotency-Key`, the same `clientRequestId` in the request, the current opaque
+base generation, a configured workload ID, and only fields advertised by
+`GET /v1/config`. The broker builds candidates but has no activation interface.
+
+The activator listens only on `/run/nixclaw/activator.sock`. Add trusted human
+operators to the configured `nixclaw-operators` group, then use:
+
+```console
+nixclawctl review <experiment-uuid>
+nixclawctl approve <experiment-uuid>
+nixclawctl confirm <experiment-uuid>
+nixclawctl rollback <experiment-uuid>
+```
+
+Approval activates workers before the head, runs the declared systemd and HTTP
+health checks, and starts a five-minute lease. An activation failure or expired
+lease restores the recorded generations in reverse order. Confirmation checks
+health again and makes the candidate the boot generation.
+
+Reviewed proposals accept unified diffs up to 64 KiB and only paths listed in
+`services.nixclaw.broker.editablePaths`. The host flake must already import
+those files; the default is `nixclaw/agent-managed.nix`. Binary patches,
+traversal, symlink targets, flake/lock changes, and protected NixOS options are
+rejected. Keep the source clean and immutable for deployment, provision bearer
+tokens outside the Nix store, and test on a canary before adding remote nodes.
+
 ## NixOS with nixos-dgx-spark
 
 `nixos-dgx-spark` enables Podman and normally makes Podman own the `docker`

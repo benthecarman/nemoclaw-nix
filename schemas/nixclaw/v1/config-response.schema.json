@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nixclaw.dev/schemas/v1/config-response.schema.json",
+  "title": "ConfigResponseV1",
+  "allOf": [
+    { "$ref": "common.schema.json#/$defs/response" },
+    { "properties": { "data": {
+      "type": "object",
+      "required": ["baseGeneration", "activeProfileName", "activeProfileHash", "servedModel", "activeProfile", "workloadIds", "tunableFields"],
+      "properties": {
+        "baseGeneration": { "type": "string" }, "activeProfileName": { "type": "string" }, "activeProfileHash": { "type": "string" }, "servedModel": { "type": "string" },
+        "activeProfile": { "type": "object" }, "workloadIds": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "tunableFields": { "type": "object", "additionalProperties": { "type": "object" } }
+      }, "additionalProperties": false
+    } } }
+  ]
+}
