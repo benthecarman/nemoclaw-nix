@@ -142,6 +142,7 @@ let
     (toString profile.maxNumBatchedTokens)
   ]
   ++ lib.optionals profile.enablePrefixCaching [ "--enable-prefix-caching" ]
+  ++ lib.optionals (!profile.enablePrefixCaching) [ "--no-enable-prefix-caching" ]
   ++ lib.optionals (profile.enableChunkedPrefill == true) [ "--enable-chunked-prefill" ]
   ++ lib.optionals (profile.enableChunkedPrefill == false) [ "--no-enable-chunked-prefill" ]
   ++ lib.optionals profile.enforceEager [ "--enforce-eager" ]

@@ -218,6 +218,29 @@
             ];
           };
           nixclawCfg = nixclawModuleEvaluation.config;
+          vllmStub = pkgs.runCommand "vllm-test" { version = "0.25.1"; } ''
+            mkdir -p "$out/bin"
+            touch "$out/bin/vllm"
+          '';
+          mkVllmPrefixCachingEvaluation =
+            enablePrefixCaching:
+            nixpkgs.lib.nixosSystem {
+              inherit system;
+              modules = [
+                self.nixosModules.vllm
+                {
+                  services.nemoclawVllm = {
+                    enable = true;
+                    package = vllmStub;
+                    model = "example/model";
+                    profiles.baseline.enablePrefixCaching = enablePrefixCaching;
+                  };
+                  system.stateVersion = "25.11";
+                }
+              ];
+            };
+          vllmPrefixCachingEnabledCfg = (mkVllmPrefixCachingEvaluation true).config;
+          vllmPrefixCachingDisabledCfg = (mkVllmPrefixCachingEvaluation false).config;
           moduleContract =
             assert cfg.virtualisation.podman.enable;
             assert !cfg.virtualisation.podman.dockerCompat;
@@ -262,14 +285,26 @@
                 python -m unittest discover -s tests -v
                 touch "$out"
               '';
+          vllmPrefixCachingFlags = pkgs.runCommand "nemoclaw-vllm-prefix-caching-flags" { } ''
+            enabledLauncher=${vllmPrefixCachingEnabledCfg.services.nemoclawVllm.launcherPackage}/bin/nemoclaw-vllm-serve
+            disabledLauncher=${vllmPrefixCachingDisabledCfg.services.nemoclawVllm.launcherPackage}/bin/nemoclaw-vllm-serve
+
+            grep -F -- '--enable-prefix-caching' "$enabledLauncher"
+            ! grep -F -- '--no-enable-prefix-caching' "$enabledLauncher"
+            grep -F -- '--no-enable-prefix-caching' \
+              "$disabledLauncher"
+            ! grep -F -- '--enable-prefix-caching' "$disabledLauncher"
+            touch "$out"
+          '';
         in
         {
           inherit
             moduleContract
-            vllmModuleContract
-            vllmSmoke
             nixclawModuleContract
             nixclawTests
+            vllmModuleContract
+            vllmPrefixCachingFlags
+            vllmSmoke
             ;
           nixclaw-platform = pkgs.nixclaw-platform;
           package = pkgs.nemoclaw;
