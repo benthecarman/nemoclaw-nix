@@ -286,6 +286,9 @@ in
       after = [ "network-online.target" ];
       wants = [ "network-online.target" ];
       wantedBy = lib.optionals cfg.autoStart [ "multi-user.target" ];
+      # FlashInfer compiles GPU-specific kernels on first use and invokes sh
+      # through PATH from Ninja rather than by its absolute store path.
+      path = [ pkgs.bash ];
 
       serviceConfig = {
         User = "nemoclaw-vllm";

@@ -260,6 +260,7 @@
               == "/var/cache/nemoclaw-vllm/vllm";
             assert builtins.elem "render" vllmCfg.users.users.nemoclaw-vllm.extraGroups;
             assert builtins.elem "video" vllmCfg.users.users.nemoclaw-vllm.extraGroups;
+            assert builtins.elem pkgs.bash vllmCfg.systemd.services.nemoclaw-vllm.path;
             assert !(builtins.elem 8000 vllmCfg.networking.firewall.allowedTCPPorts);
             pkgs.writeText "nemoclaw-vllm-module-contract" "ok\n";
           vllmSmoke = pkgs.runCommand "nemoclaw-vllm-smoke" { nativeBuildInputs = [ pkgs.vllm-nemoclaw ]; } ''
