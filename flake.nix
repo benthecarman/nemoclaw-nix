@@ -264,12 +264,25 @@
             assert !(builtins.elem 8000 vllmCfg.networking.firewall.allowedTCPPorts);
             pkgs.writeText "nemoclaw-vllm-module-contract" "ok\n";
           vllmCudaToolkitContract = pkgs.runCommand "nemoclaw-vllm-cuda-toolkit-contract" { } ''
-            test -e ${pkgs.vllm-nemoclaw.cudaToolkit}/include/cublasLt.h
-            test -e ${pkgs.vllm-nemoclaw.cudaToolkit}/lib/libcublasLt.so
+            cublasRoot=${pkgs.vllm-nemoclaw.cudaCublas}/lib/python3.12/site-packages/nvidia/cu13
+            cudaHome=${pkgs.vllm-nemoclaw.cudaToolkit}
+            cudnnLib=${pkgs.vllm-nemoclaw.cudaCudnn}/lib/python3.12/site-packages/nvidia/cudnn/lib
+            expectedRuntimeLibraryPath="$cublasRoot/lib:$cudnnLib"
+
+            test "$(readlink -f "$cudaHome/include/cublasLt.h")" = \
+              "$(readlink -f "$cublasRoot/include/cublasLt.h")"
+            test "$(readlink -f "$cudaHome/lib/libcublasLt.so.13")" = \
+              "$(readlink -f "$cublasRoot/lib/libcublasLt.so.13")"
+            test -e "$cudaHome/lib/libcublas.so"
+            test -e "$cudaHome/lib/libcublasLt.so"
+            test -e "$cudnnLib/libcudnn.so.9"
+            test ${pkgs.vllm-nemoclaw.cudaRuntimeLibraryPath} = \
+              "$expectedRuntimeLibraryPath"
             touch "$out"
           '';
           vllmSmoke = pkgs.runCommand "nemoclaw-vllm-smoke" { nativeBuildInputs = [ pkgs.vllm-nemoclaw ]; } ''
             python -c 'import vllm; assert vllm.__version__ == "0.25.1"'
+            python -c 'import torch; assert torch.backends.cudnn.version() is not None'
             touch "$out"
           '';
           nixclawModuleContract =

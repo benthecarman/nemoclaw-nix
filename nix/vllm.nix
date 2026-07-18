@@ -167,6 +167,12 @@ let
     ]
   );
   environment = pythonSet.mkVirtualEnv "vllm-0.25.1" workspace.deps.default;
+  cudaCublas = pythonSet."nvidia-cublas";
+  cudaCudnn = pythonSet."nvidia-cudnn-cu13";
+  cudaRuntimeLibraryPath = lib.concatStringsSep ":" [
+    "${cudaCublas}/lib/python3.12/site-packages/nvidia/cu13/lib"
+    "${cudaCudnn}/lib/python3.12/site-packages/nvidia/cudnn/lib"
+  ];
   cudaToolkit = pkgs.symlinkJoin {
     name = "vllm-cuda-toolkit-13.0";
     paths = with pkgs.cudaPackages_13_0; [
@@ -174,12 +180,14 @@ let
       cuda_crt
       cuda_cudart
       cuda_nvcc
-      libcublas.include
-      libcublas.lib
       libcurand.include
       libcurand.lib
     ];
     postBuild = ''
+      ln -s ${cudaCublas}/lib/python3.12/site-packages/nvidia/cu13/include/cublas*.h "$out/include/"
+      ln -s ${cudaCublas}/lib/python3.12/site-packages/nvidia/cu13/lib/libcublas*.so* "$out/lib/"
+      ln -s libcublas.so.13 "$out/lib/libcublas.so"
+      ln -s libcublasLt.so.13 "$out/lib/libcublasLt.so"
       ln -s lib "$out/lib64"
     '';
   };
@@ -211,7 +219,7 @@ environment.overrideAttrs (old: {
             ]
           } \
           --prefix LIBRARY_PATH : "${cudaToolkit}/lib:/run/opengl-driver/lib" \
-          --prefix LD_LIBRARY_PATH : "${
+          --prefix LD_LIBRARY_PATH : "${cudaRuntimeLibraryPath}:${
             lib.makeLibraryPath [ pkgs.stdenv.cc.cc.lib ]
           }:/run/opengl-driver/lib"
       fi
@@ -225,7 +233,12 @@ environment.overrideAttrs (old: {
     platforms = supportedSystems;
   };
   passthru = (old.passthru or { }) // {
-    inherit cudaToolkit;
+    inherit
+      cudaCublas
+      cudaCudnn
+      cudaRuntimeLibraryPath
+      cudaToolkit
+      ;
     pythonPackageSet = pythonSet;
   };
 })
