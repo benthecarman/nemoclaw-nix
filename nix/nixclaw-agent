@@ -2,5 +2,5 @@
 set -eu
 
 export PYTHONDONTWRITEBYTECODE=1
-export PYTHONPATH=/opt/nixclaw/src
+export PYTHONPATH=/opt/nixclaw/src:/opt/nixclaw/vendor
 exec /opt/hermes/.venv/bin/python -m nixclaw.cli "$@"

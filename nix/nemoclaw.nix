@@ -19,6 +19,7 @@
   procps,
   util-linux,
   zstd,
+  python312Packages,
   src,
   nixclaw-src,
   openshell,
@@ -26,6 +27,13 @@
 
 let
   version = "0.0.86";
+  nixclawPythonDependencies = with python312Packages; [
+    annotated-doc
+    click
+    shellingham
+    typer
+  ];
+  nixclawSitePackages = python312Packages.python.sitePackages;
 
   plugin = buildNpmPackage {
     pname = "nemoclaw-plugin";
@@ -121,6 +129,12 @@ buildNpmPackage {
     # than mutating the Spark or sandbox with pip.
     mkdir -p "$packageRoot/nixclaw"
     cp -r ${nixclaw-src}/src "$packageRoot/nixclaw/src"
+    mkdir -p "$packageRoot/nixclaw/vendor"
+    for dependency in ${
+      lib.escapeShellArgs (map (package: "${package}/${nixclawSitePackages}") nixclawPythonDependencies)
+    }; do
+      cp -r "$dependency"/. "$packageRoot/nixclaw/vendor"
+    done
     install -m 0755 ${./nixclaw-agent} "$packageRoot/nixclaw/nixclaw-agent"
     hermesNixclawMarker='ENV HERMES_TUI_DIR="/opt/hermes/ui-tui"'
     test "$(grep -Fxc "$hermesNixclawMarker" \

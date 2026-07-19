@@ -386,6 +386,7 @@
                 test -f "$packageRoot/src/lib/messaging/channels/telegram/runtime/telegram-diagnostics.ts"
                 test -f "$packageRoot/src/lib/actions/sandbox/openshell-child-visible-credentials.v0.0.85.json"
                 test -f "$packageRoot/nixclaw/src/nixclaw/cli.py"
+                test -f "$packageRoot/nixclaw/vendor/typer/__init__.py"
                 test -x "$packageRoot/nixclaw/nixclaw-agent"
                 grep -F 'COPY nixclaw/src/ /opt/nixclaw/src/' \
                   "$packageRoot/agents/hermes/Dockerfile"

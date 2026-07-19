@@ -39,8 +39,9 @@ provide a real Docker daemon and grant the invoking account access to it.
 
 Hermes sandbox builds also include the flake-pinned NixClaw client at
 `/usr/local/bin/nixclaw-agent`. Its source is baked into the immutable image
-and uses Hermes' pinned Python environment, so deployment does not mutate the
-Spark or sandbox with `pip`.
+and uses Hermes' pinned Python environment; missing pure-Python CLI dependencies
+are vendored from the pinned Nixpkgs input. Deployment does not mutate the Spark
+or sandbox with `pip`.
 
 The vLLM output is generated from [`vllm/uv.lock`](vllm/uv.lock), including its
 Python, PyTorch, and CUDA-wheel dependency graph:
