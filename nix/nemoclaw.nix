@@ -80,6 +80,10 @@ let
       --replace-fail \
         'const stagedDockerfile = path.join(buildCtx, "Dockerfile");' \
         'const stagedDockerfile = path.join(buildCtx, "Dockerfile"); fs.chmodSync(stagedDockerfile, 0o644);'
+    substituteInPlace src/lib/agent/base-image.ts \
+      --replace-fail \
+        'fs.copyFileSync(agentDockerfile, stagedDockerfile);' \
+        'fs.copyFileSync(agentDockerfile, stagedDockerfile); fs.chmodSync(stagedDockerfile, 0o644);'
     printf '%s\n' '${version}' > .version
   '';
 in
@@ -120,8 +124,8 @@ buildNpmPackage {
     cp -r "$pluginRoot/dist" "$packageRoot/nemoclaw/dist"
     cp -r "$pluginRoot/node_modules" "$packageRoot/nemoclaw/node_modules"
 
-    grep -F 'chmodSync(stagedDockerfile, 0o644)' \
-      "$packageRoot/dist/lib/agent/base-image.js"
+    test "$(grep -o -F 'chmodSync(stagedDockerfile, 0o644)' \
+      "$packageRoot/dist/lib/agent/base-image.js" | wc -l)" -eq 2
 
     for command in nemoclaw nemohermes nemo-deepagents; do
       wrapProgram "$out/bin/$command" \
