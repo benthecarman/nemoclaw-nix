@@ -1,4 +1,3 @@
-
   nixclaw_broker:
     name: nixclaw_broker
     endpoints:

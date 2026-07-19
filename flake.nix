@@ -39,7 +39,7 @@
   };
 
   outputs =
-    inputs@{
+    {
       self,
       nixpkgs,
       nemoclaw-src,

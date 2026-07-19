@@ -210,11 +210,11 @@
     "nixclaw-src": {
       "flake": false,
       "locked": {
-        "lastModified": 1784419034,
-        "narHash": "sha256-UUEv1rcqR+ou9UStys175qsG8vGxVMW9ayt2IQzowKs=",
+        "lastModified": 1784424814,
+        "narHash": "sha256-eyZ7e849sWI2KREG0jkZc3Wrj/2Zm46cHX2IxbyVMik=",
         "owner": "benthecarman",
         "repo": "nixclaw",
-        "rev": "3aeebfaad3967d2231ec10b1f02ccf022dc09992",
+        "rev": "b9fa65c53c20f7e47e0951ab505d85de3724e41f",
         "type": "github"
       },
       "original": {
