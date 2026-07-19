@@ -76,6 +76,10 @@ let
     }
     fs.writeFileSync("package-lock.json", JSON.stringify(lock, null, 2) + "\n");
     NODE
+    substituteInPlace src/lib/agent/base-image.ts \
+      --replace-fail \
+        'const stagedDockerfile = path.join(buildCtx, "Dockerfile");' \
+        'const stagedDockerfile = path.join(buildCtx, "Dockerfile"); fs.chmodSync(stagedDockerfile, 0o644);'
     printf '%s\n' '${version}' > .version
   '';
 in
@@ -115,6 +119,9 @@ buildNpmPackage {
     cp -r ${src}/nemoclaw/src "$packageRoot/nemoclaw/src"
     cp -r "$pluginRoot/dist" "$packageRoot/nemoclaw/dist"
     cp -r "$pluginRoot/node_modules" "$packageRoot/nemoclaw/node_modules"
+
+    grep -F 'chmodSync(stagedDockerfile, 0o644)' \
+      "$packageRoot/dist/lib/agent/base-image.js"
 
     for command in nemoclaw nemohermes nemo-deepagents; do
       wrapProgram "$out/bin/$command" \
