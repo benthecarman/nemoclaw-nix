@@ -377,6 +377,7 @@
                 test -f "$packageRoot/src/lib/tool-disclosure.ts"
                 test -f "$packageRoot/src/lib/messaging/channels/slack/runtime/slack-channel-guard.ts"
                 test -f "$packageRoot/src/lib/messaging/channels/telegram/runtime/telegram-diagnostics.ts"
+                test -f "$packageRoot/src/lib/actions/sandbox/openshell-child-visible-credentials.v0.0.85.json"
                 touch "$out"
               '';
         }

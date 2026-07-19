@@ -109,10 +109,8 @@ buildNpmPackage {
     # build-context staging.
     cp -r ${src}/agents "$packageRoot/agents"
     cp ${src}/tsconfig.runtime-preloads.json "$packageRoot/tsconfig.runtime-preloads.json"
-    mkdir -p "$packageRoot/src/lib"
-    rm -rf "$packageRoot/src/lib/messaging"
-    cp -r ${src}/src/lib/messaging "$packageRoot/src/lib/messaging"
-    cp ${src}/src/lib/tool-disclosure.ts "$packageRoot/src/lib/tool-disclosure.ts"
+    rm -rf "$packageRoot/src"
+    cp -r ${src}/src "$packageRoot/src"
 
     rm -rf "$packageRoot/nemoclaw"
     mkdir -p "$packageRoot/nemoclaw"
