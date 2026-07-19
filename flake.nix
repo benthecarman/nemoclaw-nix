@@ -9,6 +9,11 @@
       flake = false;
     };
 
+    nixclaw-src = {
+      url = "github:benthecarman/nixclaw";
+      flake = false;
+    };
+
     dgx-spark = {
       url = "github:graham33/nixos-dgx-spark";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -38,6 +43,7 @@
       self,
       nixpkgs,
       nemoclaw-src,
+      nixclaw-src,
       dgx-spark,
       pyproject-nix,
       uv2nix,
@@ -66,6 +72,7 @@
         openshell-nemoclaw = final.callPackage ./nix/openshell.nix { };
         nemoclaw = final.callPackage ./nix/nemoclaw.nix {
           src = nemoclaw-src;
+          inherit nixclaw-src;
           openshell = openshell-nemoclaw;
         };
         vllm-nemoclaw = mkVllmPackage final;
@@ -378,6 +385,10 @@
                 test -f "$packageRoot/src/lib/messaging/channels/slack/runtime/slack-channel-guard.ts"
                 test -f "$packageRoot/src/lib/messaging/channels/telegram/runtime/telegram-diagnostics.ts"
                 test -f "$packageRoot/src/lib/actions/sandbox/openshell-child-visible-credentials.v0.0.85.json"
+                test -f "$packageRoot/nixclaw/src/nixclaw/cli.py"
+                test -x "$packageRoot/nixclaw/nixclaw-agent"
+                grep -F 'COPY nixclaw/src/ /opt/nixclaw/src/' \
+                  "$packageRoot/agents/hermes/Dockerfile"
                 touch "$out"
               '';
         }

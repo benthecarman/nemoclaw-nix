@@ -207,6 +207,22 @@
         "type": "github"
       }
     },
+    "nixclaw-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1784419034,
+        "narHash": "sha256-UUEv1rcqR+ou9UStys175qsG8vGxVMW9ayt2IQzowKs=",
+        "owner": "benthecarman",
+        "repo": "nixclaw",
+        "rev": "3aeebfaad3967d2231ec10b1f02ccf022dc09992",
+        "type": "github"
+      },
+      "original": {
+        "owner": "benthecarman",
+        "repo": "nixclaw",
+        "type": "github"
+      }
+    },
     "nixified-ai": {
       "inputs": {
         "flake-parts": "flake-parts_2",
@@ -334,6 +350,7 @@
       "inputs": {
         "dgx-spark": "dgx-spark",
         "nemoclaw-src": "nemoclaw-src",
+        "nixclaw-src": "nixclaw-src",
         "nixpkgs": "nixpkgs",
         "pyproject-build-systems": "pyproject-build-systems",
         "pyproject-nix": "pyproject-nix",

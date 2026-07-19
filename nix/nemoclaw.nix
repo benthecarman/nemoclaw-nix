@@ -20,6 +20,7 @@
   util-linux,
   zstd,
   src,
+  nixclaw-src,
   openshell,
 }:
 
@@ -111,6 +112,19 @@ buildNpmPackage {
     cp ${src}/tsconfig.runtime-preloads.json "$packageRoot/tsconfig.runtime-preloads.json"
     rm -rf "$packageRoot/src"
     cp -r ${src}/src "$packageRoot/src"
+
+    # Bake the Nix-pinned NixClaw client into Hermes' immutable image rather
+    # than mutating the Spark or sandbox with pip.
+    mkdir -p "$packageRoot/nixclaw"
+    cp -r ${nixclaw-src}/src "$packageRoot/nixclaw/src"
+    install -m 0755 ${./nixclaw-agent} "$packageRoot/nixclaw/nixclaw-agent"
+    hermesNixclawMarker='ENV HERMES_TUI_DIR="/opt/hermes/ui-tui"'
+    test "$(grep -Fxc "$hermesNixclawMarker" \
+      "$packageRoot/agents/hermes/Dockerfile")" -eq 1
+    chmod u+w "$packageRoot/agents/hermes" \
+      "$packageRoot/agents/hermes/Dockerfile"
+    sed -i "\\|^$hermesNixclawMarker$|r ${./hermes-nixclaw.dockerfile}" \
+      "$packageRoot/agents/hermes/Dockerfile"
 
     rm -rf "$packageRoot/nemoclaw"
     mkdir -p "$packageRoot/nemoclaw"
