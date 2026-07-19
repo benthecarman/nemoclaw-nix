@@ -389,6 +389,8 @@
                 test -x "$packageRoot/nixclaw/nixclaw-agent"
                 grep -F 'COPY nixclaw/src/ /opt/nixclaw/src/' \
                   "$packageRoot/agents/hermes/Dockerfile"
+                grep -F 'NIXCLAW_BROKER_CREDENTIAL="openshell:resolve:env:NIXCLAW_BROKER_TOKEN"' \
+                  "$packageRoot/agents/hermes/Dockerfile"
                 touch "$out"
               '';
         }
