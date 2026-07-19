@@ -113,6 +113,10 @@ buildNpmPackage {
     rm -rf "$packageRoot/src"
     cp -r ${src}/src "$packageRoot/src"
 
+    chmod u+w "$packageRoot/agents/hermes/policy-additions.yaml"
+    cat ${./hermes-nixclaw-policy.yaml} \
+      >> "$packageRoot/agents/hermes/policy-additions.yaml"
+
     # Bake the Nix-pinned NixClaw client into Hermes' immutable image rather
     # than mutating the Spark or sandbox with pip.
     mkdir -p "$packageRoot/nixclaw"

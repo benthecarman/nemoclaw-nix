@@ -1,0 +1,20 @@
+
+  nixclaw_broker:
+    name: nixclaw_broker
+    endpoints:
+      - host: host.openshell.internal
+        port: 8787
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow: { method: GET, path: "/v1/facts" }
+          - allow: { method: GET, path: "/v1/config" }
+          - allow: { method: GET, path: "/v1/experiments" }
+          - allow: { method: GET, path: "/v1/experiments/**" }
+          - allow: { method: POST, path: "/v1/experiments" }
+          - allow: { method: POST, path: "/v1/proposals" }
+        allowed_ips:
+          - "172.18.0.1/32"
+    binaries:
+      - { path: /usr/local/bin/nixclaw-agent }
+      - { path: /opt/hermes/.venv/bin/python }

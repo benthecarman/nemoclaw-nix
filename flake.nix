@@ -391,6 +391,10 @@
                   "$packageRoot/agents/hermes/Dockerfile"
                 grep -F 'NIXCLAW_BROKER_CREDENTIAL="openshell:resolve:env:NIXCLAW_BROKER_TOKEN"' \
                   "$packageRoot/agents/hermes/Dockerfile"
+                grep -F 'name: nixclaw_broker' \
+                  "$packageRoot/agents/hermes/policy-additions.yaml"
+                grep -F 'path: "/v1/experiments/**"' \
+                  "$packageRoot/agents/hermes/policy-additions.yaml"
                 touch "$out"
               '';
         }
