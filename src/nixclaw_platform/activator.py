@@ -2,6 +2,7 @@ import argparse
 import grp
 import json
 import os
+import shlex
 import socketserver
 import subprocess
 import threading
@@ -12,7 +13,7 @@ from pathlib import Path
 from .common import NixClawError, append_audit, atomic_json, generation_id, load_json, now, validate_candidate_id, validate_store_path
 
 BENCHMARK_FIELDS = {
-    "environmentFingerprint", "workloadId", "servedModel", "generation", "profileHash",
+    "environmentFingerprint", "nodeId", "workloadId", "servedModel", "generation", "profileHash",
     "warmupCount", "measuredRunCount", "samples", "requestsAttempted", "requestsSucceeded",
     "inputTokens", "outputTokens", "outputTokensPerSecond", "ttftMs", "interTokenLatencyMs",
     "structuredOutputCorrect", "toolCallCorrect", "healthFailures", "restarts", "ooms",
@@ -79,13 +80,19 @@ class Activator:
         generation = validate_store_path(record.get("generationPath"))
         if record["baseGeneration"] != self.config["baseGeneration"]():
             raise NixClawError("candidate base generation is stale")
+        nodes = self._record_nodes(record)
         activated = []
         previous = {}
+        drained = False
         try:
-            for node in self._activation_order():
+            for node in nodes:
                 previous[node["id"]] = self._current_generation(node)
                 if generation_id(previous[node["id"]]) != record["baseGeneration"]:
                     raise NixClawError(f"node {node['id']} has a stale base generation")
+            if record.get("kind") == "experiment":
+                self._run_hook("canaryDrainCommand")
+                drained = True
+            for node in nodes:
                 self._prepare(node, generation)
                 activated.append(node)
                 self._switch(node, generation, "test")
@@ -101,6 +108,9 @@ class Activator:
             for node in reversed(activated):
                 try: self._switch(node, previous[node["id"]], "test")
                 except Exception: pass
+            if drained:
+                try: self._run_hook("canaryRestoreCommand")
+                except Exception: pass
             record["state"] = "rolledBack"; record["rollbackReason"] = f"activation failed: {error}"; self._save(record)
             raise
 
@@ -109,12 +119,45 @@ class Activator:
         if record.get("kind") == "experiment" and not record.get("decision", {}).get("accepted"):
             raise NixClawError("candidate requires an accepted benchmark decision before confirmation")
         generation = validate_store_path(record.get("generationPath"))
-        for node in self._activation_order():
-            self._health(node)
-            self._persist(node, generation)
-        record["state"] = "accepted"; record.pop("leaseExpiresAt", None); self._save(record)
-        (self.leases / f"{record['id']}.json").unlink(missing_ok=True)
-        return self._review(record)
+        targets = self._record_nodes(record)
+        promotions = self._nodes_by_id(record.get("promotionNodes", []))
+        previous = record.get("previousGenerations", {})
+        changed = []
+        try:
+            for node in targets:
+                self._health(node)
+                self._persist(node, generation)
+                changed.append(node)
+            for node in promotions:
+                old = self._current_generation(node)
+                if generation_id(old) != record["baseGeneration"]:
+                    raise NixClawError(f"node {node['id']} has a stale base generation")
+                previous[node["id"]] = old
+                self._prepare(node, generation)
+                self._switch(node, generation, "test")
+                changed.append(node)
+                self._health(node)
+                self._persist(node, generation)
+            if record.get("kind") == "experiment":
+                self._run_hook("canaryRestoreCommand")
+            record["previousGenerations"] = previous
+            record["state"] = "accepted"; record.pop("leaseExpiresAt", None); self._save(record)
+            (self.leases / f"{record['id']}.json").unlink(missing_ok=True)
+            return self._review(record)
+        except Exception as error:
+            for node in reversed(changed):
+                old = previous.get(node["id"])
+                if old:
+                    try:
+                        self._switch(node, old, "test")
+                        self._persist(node, old)
+                    except Exception: pass
+            if record.get("kind") == "experiment":
+                try: self._run_hook("canaryRestoreCommand")
+                except Exception: pass
+            record["state"] = "rolledBack"; record["rollbackReason"] = f"promotion failed: {error}"; record.pop("leaseExpiresAt", None); self._save(record)
+            (self.leases / f"{record['id']}.json").unlink(missing_ok=True)
+            raise
 
     def _record_results(self, record, request):
         if record.get("kind") != "experiment":
@@ -161,6 +204,11 @@ class Activator:
             if value.get(key) != wanted: raise NixClawError(f"{name} does not match the experiment")
         if baseline.get("environmentFingerprint") != candidate.get("environmentFingerprint"):
             raise NixClawError("benchmark environment fingerprints do not match")
+        baseline_nodes = set(record.get("promotionNodes") or record.get("targetNodes", []))
+        if baseline.get("nodeId") not in baseline_nodes:
+            raise NixClawError("baseline benchmark node is not a stable replica")
+        if candidate.get("nodeId") not in set(record.get("targetNodes", [])):
+            raise NixClawError("candidate benchmark node is not an experiment target")
         if baseline.get("servedModel") != candidate.get("servedModel"):
             raise NixClawError("benchmark served models do not match")
 
@@ -218,11 +266,13 @@ class Activator:
     def _rollback(self, record, reason):
         if record.get("state") not in {"active", "measuring", "accepted"}: raise NixClawError("candidate is not active or accepted")
         previous = record.get("previousGenerations", {})
-        for node in reversed(self._activation_order()):
+        for node in reversed(self._nodes_by_id(previous)):
             old = previous.get(node["id"])
             if old:
                 self._switch(node, old, "test")
                 self._persist(node, old)
+        if record.get("kind") == "experiment":
+            self._run_hook("canaryRestoreCommand")
         record["state"] = "rolledBack"; record["rollbackReason"] = reason; record.pop("leaseExpiresAt", None); self._save(record)
         (self.leases / f"{record['id']}.json").unlink(missing_ok=True)
         return self._review(record)
@@ -230,10 +280,32 @@ class Activator:
     def _activation_order(self):
         return sorted(self.config["nodes"], key=lambda node: (node["role"] == "head", node["rank"]))
 
+    def _nodes_by_id(self, identifiers):
+        wanted = set(identifiers)
+        nodes = [node for node in self._activation_order() if node["id"] in wanted]
+        found = {node["id"] for node in nodes}
+        unknown = wanted - found
+        if unknown:
+            raise NixClawError(f"unknown cluster nodes: {', '.join(sorted(unknown))}")
+        return nodes
+
+    def _record_nodes(self, record):
+        identifiers = record.get("targetNodes")
+        nodes = self._nodes_by_id(identifiers) if identifiers is not None else self._activation_order()
+        if not nodes:
+            raise NixClawError("candidate has no activation targets")
+        return nodes
+
+    def _run_hook(self, name):
+        command = self.config.get(name, [])
+        if command:
+            subprocess.run(command, check=True, capture_output=True, text=True, timeout=self.config["commandTimeoutSeconds"])
+
     def _remote(self, node, command):
         if node["local"]: return subprocess.run(command, check=True, capture_output=True, text=True, timeout=self.config["commandTimeoutSeconds"])
         remote = node["sshTarget"]
-        return subprocess.run(["ssh", "-oBatchMode=yes", "--", remote, *command], check=True, capture_output=True, text=True, timeout=self.config["commandTimeoutSeconds"])
+        ssh = ["ssh", *self.config.get("sshOptions", []), "-oBatchMode=yes", "--", remote]
+        return subprocess.run([*ssh, *command], check=True, capture_output=True, text=True, timeout=self.config["commandTimeoutSeconds"])
 
     def _current_generation(self, node):
         result = self._remote(node, ["readlink", "-f", "/run/current-system"])
@@ -241,7 +313,10 @@ class Activator:
 
     def _prepare(self, node, generation):
         if not node["local"]:
-            subprocess.run(["nix", "copy", "--to", "ssh-ng://" + node["sshTarget"], generation], check=True, timeout=self.config["commandTimeoutSeconds"])
+            environment = os.environ.copy()
+            ssh_options = [*self.config.get("sshOptions", []), "-oBatchMode=yes"]
+            environment["NIX_SSHOPTS"] = shlex.join(ssh_options)
+            subprocess.run(["nix", "copy", "--to", "ssh-ng://" + node["sshTarget"], generation], check=True, timeout=self.config["commandTimeoutSeconds"], env=environment)
 
     def _switch(self, node, generation, mode):
         if not generation.startswith("/nix/store/"): raise NixClawError("unsafe generation path")

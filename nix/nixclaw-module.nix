@@ -33,6 +33,14 @@ let
           default = "worker";
         };
         rank = lib.mkOption { type = lib.types.ints.unsigned; };
+        experimentRole = lib.mkOption {
+          type = lib.types.enum [
+            "baseline"
+            "canary"
+          ];
+          default = "canary";
+          description = "Replica role used for controlled performance experiments.";
+        };
         local = lib.mkOption {
           type = lib.types.bool;
           default = false;
@@ -67,9 +75,16 @@ let
       id
       role
       rank
+      experimentRole
       healthy
       ;
   }) cfg.cluster.nodes;
+  baselineNodes = map (node: node.id) (
+    lib.filter (node: node.experimentRole == "baseline") cfg.cluster.nodes
+  );
+  experimentTargets = map (node: node.id) (
+    lib.filter (node: node.experimentRole == "canary") cfg.cluster.nodes
+  );
   brokerConfig = pkgs.writeText "nixclaw-broker-v1.json" (
     builtins.toJSON {
       listenAddress = cfg.broker.listenAddress;
@@ -91,6 +106,7 @@ let
       nixosRevision = cfg.nixosRevision;
       gpuFacts = cfg.facts.gpus;
       inherit clusterNodes;
+      inherit baselineNodes experimentTargets;
       healthServices = cfg.health.services;
       healthUrls = cfg.health.urls;
     }
@@ -109,6 +125,9 @@ let
       healthServices = cfg.health.services;
       healthUrls = cfg.health.urls;
       nodes = cfg.cluster.nodes;
+      sshOptions = cfg.activator.sshOptions;
+      canaryDrainCommand = cfg.activator.canaryDrainCommand;
+      canaryRestoreCommand = cfg.activator.canaryRestoreCommand;
     }
   );
 in
@@ -191,6 +210,21 @@ in
         type = lib.types.ints.positive;
         default = 2097152;
         description = "Maximum record-results request size in bytes.";
+      };
+      sshOptions = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [ ];
+        description = "Administrator-reviewed OpenSSH arguments for remote activation.";
+      };
+      canaryDrainCommand = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [ ];
+        description = "Optional argv executed before a canary is activated.";
+      };
+      canaryRestoreCommand = lib.mkOption {
+        type = lib.types.listOf lib.types.str;
+        default = [ ];
+        description = "Optional argv executed after promotion or rollback.";
       };
     };
     cluster.nodes = lib.mkOption {

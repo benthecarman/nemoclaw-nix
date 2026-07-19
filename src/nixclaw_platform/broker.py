@@ -84,6 +84,8 @@ class Broker:
             "activeProfile": active,
             "workloadIds": self.config["workloadIds"],
             "tunableFields": {key: PROFILE_SPECS[key] for key in self.config["tunableFields"]},
+            "baselineNodes": self.config["baselineNodes"],
+            "experimentTargets": self.config["experimentTargets"],
         }
 
     def facts(self):
@@ -129,6 +131,7 @@ class Broker:
         allowed = {
             "id", "state", "baseGeneration", "candidateGeneration", "workloadId",
             "hypothesis", "profilePatch", "originalProfileHash", "candidateProfileHash",
+            "targetNodes", "promotionNodes",
             "validationFindings", "baselineBenchmark", "candidateBenchmark", "decision",
             "rollbackReason", "error", "createdAt", "updatedAt",
         }
@@ -186,7 +189,7 @@ class Broker:
             if path in PROTECTED or path not in editable: raise NixClawError(f"path is not editable: {path}")
 
     def submit_experiment(self, body, idempotency_key):
-        require_fields(body, ["baseGeneration", "workloadId", "hypothesis", "profilePatch", "clientRequestId"])
+        require_fields(body, ["baseGeneration", "workloadId", "hypothesis", "profilePatch", "targetNodes", "clientRequestId"])
         require_uuid(body["clientRequestId"], "clientRequestId")
         require_uuid(idempotency_key, "Idempotency-Key")
         if idempotency_key != body["clientRequestId"]:
@@ -204,6 +207,8 @@ class Broker:
             "id": identifier, "kind": "experiment", "state": "submitted",
             "baseGeneration": body["baseGeneration"], "workloadId": body["workloadId"],
             "hypothesis": body["hypothesis"], "profilePatch": body["profilePatch"],
+            "targetNodes": body["targetNodes"],
+            "promotionNodes": self.config["baselineNodes"],
             "originalProfileHash": profile_hash(self.config["activeProfile"]),
             "createdAt": timestamp, "updatedAt": timestamp,
             "requestDigest": hashlib.sha256(canonical(body).encode()).hexdigest(),
@@ -219,6 +224,14 @@ class Broker:
         if body["baseGeneration"] != self.generation(): raise NixClawError("stale base generation")
         if body["workloadId"] not in self.config["workloadIds"] or not WORKLOAD_ID.fullmatch(body["workloadId"]): raise NixClawError("unknown workloadId")
         if not isinstance(body["hypothesis"], str) or not 1 <= len(body["hypothesis"]) <= 2000: raise NixClawError("hypothesis must contain 1 to 2000 characters")
+        targets = body["targetNodes"]
+        if not isinstance(targets, list) or not targets or not all(isinstance(node, str) for node in targets):
+            raise NixClawError("targetNodes must be a non-empty array of node IDs")
+        if len(targets) != len(set(targets)):
+            raise NixClawError("targetNodes must contain unique node IDs")
+        unknown_targets = set(targets) - set(self.config["experimentTargets"])
+        if unknown_targets:
+            raise NixClawError(f"unsupported experiment targets: {', '.join(sorted(unknown_targets))}")
         patch = body["profilePatch"]
         if not isinstance(patch, dict) or not patch: raise NixClawError("profilePatch must be a non-empty object")
         unknown = patch.keys() - set(self.config["tunableFields"])

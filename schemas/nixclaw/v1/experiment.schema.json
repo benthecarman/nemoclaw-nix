@@ -3,7 +3,7 @@
   "$id": "https://nixclaw.dev/schemas/v1/experiment.schema.json",
   "title": "ExperimentV1",
   "type": "object",
-  "required": ["id", "state", "baseGeneration", "workloadId", "hypothesis", "profilePatch", "originalProfileHash", "createdAt", "updatedAt"],
+  "required": ["id", "state", "baseGeneration", "workloadId", "hypothesis", "profilePatch", "targetNodes", "promotionNodes", "originalProfileHash", "createdAt", "updatedAt"],
   "properties": {
     "id": { "type": "string", "format": "uuid" },
     "state": { "enum": ["submitted", "validating", "built", "awaitingApproval", "active", "measuring", "accepted", "rejected", "rolledBack", "failed"] },
@@ -12,6 +12,8 @@
     "workloadId": { "type": "string" },
     "hypothesis": { "type": "string" },
     "profilePatch": { "$ref": "vllm-profile-patch.schema.json" },
+    "targetNodes": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } },
+    "promotionNodes": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
     "originalProfileHash": { "type": "string" },
     "candidateProfileHash": { "type": "string" },
     "validationFindings": { "type": "array", "items": { "type": "string" } },

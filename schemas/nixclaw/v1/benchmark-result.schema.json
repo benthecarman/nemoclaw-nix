@@ -3,9 +3,9 @@
   "$id": "https://nixclaw.dev/schemas/v1/benchmark-result.schema.json",
   "title": "BenchmarkResultV1",
   "type": "object",
-  "required": ["environmentFingerprint", "workloadId", "servedModel", "generation", "profileHash", "warmupCount", "measuredRunCount", "samples", "requestsAttempted", "requestsSucceeded", "inputTokens", "outputTokens", "outputTokensPerSecond", "ttftMs", "interTokenLatencyMs", "structuredOutputCorrect", "toolCallCorrect", "healthFailures", "restarts", "ooms", "ncclErrors", "criticalMemoryPressure"],
+  "required": ["environmentFingerprint", "nodeId", "workloadId", "servedModel", "generation", "profileHash", "warmupCount", "measuredRunCount", "samples", "requestsAttempted", "requestsSucceeded", "inputTokens", "outputTokens", "outputTokensPerSecond", "ttftMs", "interTokenLatencyMs", "structuredOutputCorrect", "toolCallCorrect", "healthFailures", "restarts", "ooms", "ncclErrors", "criticalMemoryPressure"],
   "properties": {
-    "environmentFingerprint": { "type": "string" }, "workloadId": { "type": "string" }, "servedModel": { "type": "string" }, "generation": { "type": "string" }, "profileHash": { "type": "string" },
+    "environmentFingerprint": { "type": "string" }, "nodeId": { "type": "string" }, "workloadId": { "type": "string" }, "servedModel": { "type": "string" }, "generation": { "type": "string" }, "profileHash": { "type": "string" },
     "warmupCount": { "type": "integer", "minimum": 0 }, "measuredRunCount": { "type": "integer", "minimum": 1 }, "samples": { "type": "array", "items": { "type": "object" } },
     "requestsAttempted": { "type": "integer", "minimum": 0 }, "requestsSucceeded": { "type": "integer", "minimum": 0 }, "inputTokens": { "type": "integer", "minimum": 0 }, "outputTokens": { "type": "integer", "minimum": 0 },
     "outputTokensPerSecond": { "$ref": "#/$defs/summary" }, "ttftMs": { "$ref": "#/$defs/summary" }, "interTokenLatencyMs": { "$ref": "#/$defs/summary" },

@@ -22,6 +22,8 @@ class BrokerContractTests(unittest.TestCase):
             "configurationName": "host",
             "maxProposalBytes": 65536,
             "editablePaths": ["nixclaw/agent-managed.nix"],
+            "baselineNodes": ["head"],
+            "experimentTargets": ["worker"],
         }
         self.broker = Broker(self.config)
         self.broker.generation = lambda: "nixos-current"
@@ -33,6 +35,7 @@ class BrokerContractTests(unittest.TestCase):
             "baseGeneration": "nixos-current", "workloadId": "interactive",
             "hypothesis": "Smaller batches should reduce latency.",
             "profilePatch": patch or {"gpuMemoryUtilization": 0.75},
+            "targetNodes": ["worker"],
             "clientRequestId": "b2fd9b1c-dd20-4b45-91ba-d777c78baa5d",
         }
 
@@ -49,6 +52,11 @@ class BrokerContractTests(unittest.TestCase):
         with self.assertRaisesRegex(NixClawError, "maximum"): self.broker._validate_experiment(self.request({"gpuMemoryUtilization": 1.1}))
 
     def test_nullable_field(self): self.broker._validate_experiment(self.request({"enableChunkedPrefill": None}))
+
+    def test_non_canary_target_rejected(self):
+        value = self.request(); value["targetNodes"] = ["head"]
+        with self.assertRaisesRegex(NixClawError, "unsupported experiment targets"):
+            self.broker._validate_experiment(value)
 
     def test_protected_proposal_rejected(self):
         patch = "--- a/nixclaw/agent-managed.nix\n+++ b/nixclaw/agent-managed.nix\n@@ -0,0 +1 @@\n+users.users.root = {};\n"
@@ -81,6 +89,8 @@ class FakeActivator(Activator):
     def _switch(self, node, generation, mode): self.actions.append(("switch", node["id"], generation, mode))
     def _health(self, node): self.actions.append(("health", node["id"]))
     def _persist(self, node, generation): self.actions.append(("persist", node["id"], generation))
+    def _run_hook(self, name):
+        if self.config.get(name): self.actions.append(("hook", name))
 
 
 class ActivatorTests(unittest.TestCase):
@@ -94,6 +104,8 @@ class ActivatorTests(unittest.TestCase):
             "id": self.identifier, "kind": "experiment", "state": "awaitingApproval",
             "baseGeneration": generation_id("/nix/store/old-generation"),
             "candidateGeneration": "nixos-candidate",
+            "targetNodes": ["worker"],
+            "promotionNodes": ["head"],
             "workloadId": "agent-tools",
             "originalProfileHash": "sha256:baseline",
             "candidateProfileHash": "sha256:candidate",
@@ -105,6 +117,7 @@ class ActivatorTests(unittest.TestCase):
             "brokerGroup": grp.getgrgid(os.getgid()).gr_name, "leaseSeconds": 300,
             "commandTimeoutSeconds": 10, "healthTimeoutSeconds": 1,
             "healthServices": [], "healthUrls": [],
+            "canaryDrainCommand": ["drain"], "canaryRestoreCommand": ["restore"],
             "nodes": [{"id": "worker", "role": "worker", "rank": 1, "local": False, "sshTarget": "worker"}, {"id": "head", "role": "head", "rank": 0, "local": True, "sshTarget": ""}],
             "baseGeneration": lambda: generation_id("/nix/store/old-generation"),
         }
@@ -112,9 +125,10 @@ class ActivatorTests(unittest.TestCase):
 
     def tearDown(self): self.temporary.cleanup()
 
-    def benchmark(self, generation, profile_hash, throughput, ttft, latency):
+    def benchmark(self, node_id, generation, profile_hash, throughput, ttft, latency):
         return {
             "environmentFingerprint": "sha256:environment",
+            "nodeId": node_id,
             "workloadId": "agent-tools",
             "servedModel": "model",
             "generation": generation,
@@ -140,9 +154,9 @@ class ActivatorTests(unittest.TestCase):
 
     def results_request(self):
         baseline = self.benchmark(
-            generation_id("/nix/store/old-generation"), "sha256:baseline", 100.0, 200.0, 20.0,
+            "head", generation_id("/nix/store/old-generation"), "sha256:baseline", 100.0, 200.0, 20.0,
         )
-        candidate = self.benchmark("nixos-candidate", "sha256:candidate", 120.0, 150.0, 15.0)
+        candidate = self.benchmark("worker", "nixos-candidate", "sha256:candidate", 120.0, 150.0, 15.0)
         decision = {
             "accepted": True,
             "baseline": {
@@ -184,15 +198,19 @@ class ActivatorTests(unittest.TestCase):
     def test_approve_workers_first_and_confirm(self, _validate, _chown):
         approved = self.activator.operate("approve", self.identifier)
         self.assertEqual(approved["state"], "active")
+        self.assertIn(("hook", "canaryDrainCommand"), self.activator.actions)
         prepares = [action[1] for action in self.activator.actions if action[0] == "prepare"]
-        self.assertEqual(prepares, ["worker", "head"])
+        self.assertEqual(prepares, ["worker"])
         with self.assertRaisesRegex(NixClawError, "accepted benchmark decision"):
             self.activator.operate("confirm", self.identifier)
         measured = self.activator.operate("record-results", self.identifier, self.results_request())
         self.assertEqual(measured["state"], "measuring")
         confirmed = self.activator.operate("confirm", self.identifier)
         self.assertEqual(confirmed["state"], "accepted")
+        prepares = [action[1] for action in self.activator.actions if action[0] == "prepare"]
+        self.assertEqual(prepares, ["worker", "head"])
         self.assertEqual([action[1] for action in self.activator.actions if action[0] == "persist"], ["worker", "head"])
+        self.assertEqual(self.activator.actions[-1], ("hook", "canaryRestoreCommand"))
 
     @patch("nixclaw_platform.activator.os.chown")
     @patch("nixclaw_platform.activator.validate_store_path", return_value="/nix/store/new-generation")
@@ -208,6 +226,8 @@ class ActivatorTests(unittest.TestCase):
     def test_reviewed_proposal_does_not_require_benchmarks(self, _validate, _chown):
         record = load_json(self.record_path)
         record["kind"] = "proposal"
+        record.pop("targetNodes")
+        record.pop("promotionNodes")
         atomic_json(self.record_path, record)
         self.activator.operate("approve", self.identifier)
         confirmed = self.activator.operate("confirm", self.identifier)

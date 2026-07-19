@@ -168,6 +168,12 @@ requires operator-attached benchmark results with an accepted decision. The
 activator verifies that their workload, environment, generations, profile
 hashes, metric summaries, and decision gates match the reviewed experiment.
 
+Replica deployments mark nodes as `baseline` or `canary`. An experiment drains
+and changes only its explicit canary targets. Benchmark results identify the
+stable and canary nodes, and confirmation promotes an accepted generation to
+the baseline replicas before restoring normal routing. A rejected, failed, or
+expired experiment restores the canary without disturbing the baseline.
+
 Reviewed proposals accept unified diffs up to 64 KiB and only paths listed in
 `services.nixclaw.broker.editablePaths`. The host flake must already import
 those files; the default is `nixclaw/agent-managed.nix`. Binary patches,

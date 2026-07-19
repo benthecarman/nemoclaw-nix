@@ -6,11 +6,13 @@
     { "$ref": "common.schema.json#/$defs/response" },
     { "properties": { "data": {
       "type": "object",
-      "required": ["baseGeneration", "activeProfileName", "activeProfileHash", "servedModel", "activeProfile", "workloadIds", "tunableFields"],
+      "required": ["baseGeneration", "activeProfileName", "activeProfileHash", "servedModel", "activeProfile", "workloadIds", "tunableFields", "baselineNodes", "experimentTargets"],
       "properties": {
         "baseGeneration": { "type": "string" }, "activeProfileName": { "type": "string" }, "activeProfileHash": { "type": "string" }, "servedModel": { "type": "string" },
         "activeProfile": { "type": "object" }, "workloadIds": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
-        "tunableFields": { "type": "object", "additionalProperties": { "type": "object" } }
+        "tunableFields": { "type": "object", "additionalProperties": { "type": "object" } },
+        "baselineNodes": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+        "experimentTargets": { "type": "array", "items": { "type": "string" }, "uniqueItems": true }
       }, "additionalProperties": false
     } } }
   ]

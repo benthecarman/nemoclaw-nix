@@ -205,14 +205,14 @@ on candidate IDs already validated and recorded by the broker.
 
 For a cluster, it:
 
-1. Confirms every node has a built candidate.
-2. Records every current generation.
-3. Activates worker nodes before the head.
-4. Waits for cluster and model health.
-5. Runs mandatory correctness and performance checks.
-6. Rolls every node back if any node fails.
+1. Confirms the requested targets are advertised canaries.
+2. Drains the canaries and records their current generations.
+3. Activates only the canaries and waits for model health.
+4. Compares each candidate directly with an unchanged stable replica.
+5. Promotes an accepted generation to the stable replicas.
+6. Rolls changed nodes back if activation or promotion fails.
 7. Starts a five-minute rollback lease.
-8. Persists the generation only after operator confirmation.
+8. Restores normal routing only after confirmation or rollback.
 
 ### OpenShell boundary
 
