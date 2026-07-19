@@ -396,6 +396,8 @@
                   "$packageRoot/agents/hermes/policy-additions.yaml"
                 grep -F 'path: "/v1/experiments/**"' \
                   "$packageRoot/agents/hermes/policy-additions.yaml"
+                grep -Fx '    - /opt/nixclaw' \
+                  "$packageRoot/agents/hermes/policy-additions.yaml"
                 touch "$out"
               '';
         }

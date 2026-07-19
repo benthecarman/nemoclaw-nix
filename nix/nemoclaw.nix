@@ -121,9 +121,14 @@ buildNpmPackage {
     rm -rf "$packageRoot/src"
     cp -r ${src}/src "$packageRoot/src"
 
-    chmod u+w "$packageRoot/agents/hermes/policy-additions.yaml"
+    hermesPolicy="$packageRoot/agents/hermes/policy-additions.yaml"
+    hermesNixclawReadOnlyMarker='    - /opt/hermes'
+    test "$(grep -Fxc "$hermesNixclawReadOnlyMarker" "$hermesPolicy")" -eq 1
+    chmod u+w "$packageRoot/agents/hermes" "$hermesPolicy"
+    sed -i "\\|^$hermesNixclawReadOnlyMarker$|a\\    - /opt/nixclaw" \
+      "$hermesPolicy"
     cat ${./hermes-nixclaw-policy.yaml} \
-      >> "$packageRoot/agents/hermes/policy-additions.yaml"
+      >> "$hermesPolicy"
 
     # Bake the Nix-pinned NixClaw client into Hermes' immutable image rather
     # than mutating the Spark or sandbox with pip.
