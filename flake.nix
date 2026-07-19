@@ -390,8 +390,10 @@
                 test -x "$packageRoot/nixclaw/nixclaw-agent"
                 grep -F 'COPY nixclaw/src/ /opt/nixclaw/src/' \
                   "$packageRoot/agents/hermes/Dockerfile"
-                grep -F 'NIXCLAW_BROKER_CREDENTIAL="openshell:resolve:env:NIXCLAW_BROKER_TOKEN"' \
-                  "$packageRoot/agents/hermes/Dockerfile"
+                grep -F 'NIXCLAW_BROKER_URL="''${NIXCLAW_BROKER_URL:-http://host.openshell.internal:8787}"' \
+                  "$packageRoot/nixclaw/nixclaw-agent"
+                grep -F 'NIXCLAW_STATE_DIR="''${NIXCLAW_STATE_DIR:-/sandbox/state/nixclaw}"' \
+                  "$packageRoot/nixclaw/nixclaw-agent"
                 grep -F 'name: nixclaw_broker' \
                   "$packageRoot/agents/hermes/policy-additions.yaml"
                 grep -F 'path: "/v1/experiments/**"' \

@@ -3,4 +3,6 @@ set -eu
 
 export PYTHONDONTWRITEBYTECODE=1
 export PYTHONPATH=/opt/nixclaw/src:/opt/nixclaw/vendor
+export NIXCLAW_BROKER_URL="${NIXCLAW_BROKER_URL:-http://host.openshell.internal:8787}"
+export NIXCLAW_STATE_DIR="${NIXCLAW_STATE_DIR:-/sandbox/state/nixclaw}"
 exec /opt/hermes/.venv/bin/python -m nixclaw.cli "$@"
